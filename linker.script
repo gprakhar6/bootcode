@@ -1,0 +1,47 @@
+ENTRY(__reset)
+PAGE_SIZE  = 0x1000;
+CODE_START = 0x1000;
+STACK_SIZE = 0x4000;
+SECTIONS
+{
+  /* code section */
+  . = CODE_START;
+
+      /*  layout section */
+  LAYOUT_START = .;
+  .layout : { *(.layout) }
+  . = ALIGN(PAGE_SIZE); /* for some reason align it to 8 bytes */
+  LAYOUT_SIZE = . - LAYOUT_START;
+      /* end layout section*/
+      
+      /* user code section */
+  . = ALIGN(PAGE_SIZE);
+  USER_CODE_START = .;
+  .text   : { boot.o(.text) *(.text) }
+      /* end user code section*/
+
+      /* rodata section */
+  . = ALIGN(PAGE_SIZE);
+  .rodata : {*.(rodata)}
+      /* end rodata section */
+      
+  USER_CODE_SIZE = . - USER_CODE_START;
+      
+  CODE_SIZE = . - CODE_START;
+  /* end code section */
+
+
+  /* data section */
+  . = ALIGN(PAGE_SIZE);
+  DATA_START = .;
+  .bss    : { *.(.bss)}
+  .data   : { *(.data) }
+  . = ALIGN(8); /* for some reason align it to 8 bytes */
+  DATA_SIZE = . - DATA_START;
+  /* end data section  */
+  
+  . = ALIGN(PAGE_SIZE);
+  . += STACK_SIZE;
+  STACK_START = .;
+  /DISCARD/ : { *(.eh_frame .comment) }
+}
