@@ -20,6 +20,7 @@
 .equ INTERRUPT_GATE,      (0xe)	
 .equ EXCEPTION_GATE,      (0xf)	
 .equ SERIAL_PORT,         (0x3f8)
+.equ IST,         	  (0x0) // interrupt stack table
 	
 .macro INT_GATE_32 offset
 	.long (\offset & 0xFFFF) | (CODE_DESC - NULL_DESC) << 16
@@ -48,53 +49,24 @@
 .code16
 __reset:
 	cli
-	movl $(STACK_START-16), %esp // why -16 will think later
+	movl $(STACK_START-16), %esp       // why -16 will think later
 	movl %esp, %ebp
-	call check_cpuid
-//fill_idt:
-//	pushl %ebp
-//	movl %esp, %ebp
-//	subl $12, %esp
-//	movl $0, %eax
-//	movl $idt, %ebx	// where to store
-//	movl $int_expt_trampoline, %ecx
-//.loop1:
-//	cmp $256, %eax
-//	jz .halt1
-//	mov %ecx, %edx
-//	shll $16, %edx
-//	shrl $16, %edx
-//	orl %edx, (%ebx)
-//	addl $4, %ebx
-//	mov %ecx, %edx
-//	shrl $16, %edx
-//	shll $16, %edx
-//	orl %edx, (%ebx)
-//	addl $1, %eax
-//	addl $4, %ebx
-//	addl $20, %ecx
-//	jmp .loop1
-//.halt1:
-//	//mov $idt, %esi
-//	//mov $32, %edi
-//	//call hex_dump_32
-//	movl %ebp, %esp
-//	popl %ebp
-	// Enter long mode.
-	movl $0b10100000, %eax                // Set the PAE and PGE bit.
+	//call check_cpuid
+	movl $0b10100000, %eax             // Set the PAE and PGE bit.
 	movl %eax, %cr4
 	movl $boot_p4, %eax
 	movl %eax, %cr3
-	movl $0xC0000080, %ecx               // Read from the EFER MSR. 
+	movl $(MSR_EFER), %ecx             // Read from the EFER MSR. 
 	rdmsr
-	orl $0x00000100, %eax                // Set the LME bit.
+	orl $(EFER_LM | EFER_NX | EFER_SCE), %eax  // Set the LME bit.
 	wrmsr
 	movl %cr0, %eax
-	orl $0x80000001, %eax
-	movl %eax, %cr0
+	orl $0x80000001, %eax // enable paging and protected mode 
+	movl %eax, %cr0 // now we are in compatibility mode
 	movl $gdtr64, %eax
 	lgdt (%eax)
-	jmp $0x08, $long_mode	
+	jmp $0x08, $long_mode	// switch to long mode
+
 // esi has address, edi has size	
 hex_dump_16:
 	push %eax
@@ -120,7 +92,7 @@ hex_dump_16:
 	pop %edx
 	pop %eax
 	ret
-
+	
 check_cpuid:
 	// Check if CPUID is supported by attempting to flip the ID bit (bit 21) in
 	// the FLAGS register. If we can flip it, CPUID is available.
@@ -158,70 +130,88 @@ check_cpuid:
 .NoLongMode:
 	hlt
 .NoLongMode1:
-	hlt	
+	hlt
+	
 detect_long_mode:
 	mov $0x80000000, %eax      // Set the A-register to 0x80000000.
 	cpuid                  	   // CPU identification.
-	cmp $0x80000001, %eax     // Compare the A-register with 0x80000001.
+	cmp $0x80000001, %eax      // Compare the A-register with 0x80000001.
 	jb .NoLongMode             // It is less, there is no long mode.
-	mov $0x80000001, %eax    // Set the A-register to 0x80000001.
+	mov $0x80000001, %eax      // Set the A-register to 0x80000001.
 	cpuid                      // CPU identification.
 	test $(1 << 29), %edx      // Test if the LM-bit, which is bit 29, is set in the D-register.
-	jz .NoLongMode1             // They aren't, there is no long mode.
+	jz .NoLongMode1            // They aren't, there is no long mode.
 	ret
-int_expt_trampoline:
-IDT_TABLE 0, 100
-	
-int_expt_handler:
-	cli
-	movl %esp, %esi
-	movl $20, %edi
-	call hex_dump_16
-	popl %eax
-	popl %eax
-	iret
 
-
-	
-	
-.p2align 4
-idt:
-	.rept 20
-		EXPT_GATE_32 offset=0
-	.endr
-	.rept 236
-		INT_GATE_32 offset=0
-	.endr
-	
-idt_end:	
-idt_descriptor :
-    .word idt_end - idt - 1 // Size of our idt, always one less than the actual size
-    .quad idt // Start address of our idt
-
-.p2align 4
-NULL_DESC:
-	.quad 0x0000000000000000
-
-CODE_DESC:
-	.word 0xFFFF       // limit low
-	.word 0            // base low
-	.byte 0            // base middle
-	.byte 0b10011010    // access
-	.byte 0b11001111    // granularity
-	.byte 0            // base high
-
-DATA_DESC:
-	.word 0xFFFF       // data descriptor
-	.word 0            // limit low
-	.byte 0            // base low
-	.byte 0b10010010    // access
-	.byte 0b11001111    // granularity
-	.byte 0            // base high
-gdtr:
-	.word gdtr - NULL_DESC - 1
-	.long NULL_DESC
+//.p2align 4
+//NULL_DESC:
+//	.quad 0x0000000000000000
+//
+//CODE_DESC:
+//	.word 0xFFFF       // limit low
+//	.word 0            // base low
+//	.byte 0            // base middle
+//	.byte 0b10011010    // access
+//	.byte 0b11001111    // granularity
+//	.byte 0            // base high
+//
+//DATA_DESC:
+//	.word 0xFFFF       // data descriptor
+//	.word 0            // limit low
+//	.byte 0            // base low
+//	.byte 0b10010010    // access
+//	.byte 0b11001111    // granularity
+//	.byte 0            // base high
+//gdtr:
+//	.word gdtr - NULL_DESC - 1
+//	.long NULL_DESC
 	
 .code64
+.macro INT_GATE_64 offset
+	.long (\offset & 0xFFFF) | (CODE_DESC_64 - NULL_DESC_64) << 16
+	.long ((\offset & 0xFFFF0000) << 16) | (PRESENT << 15) | \
+	(RING0 << 13) | (INTERRUPT_GATE << 8) | (IST << 0)
+	.long (\offset & (0xffffffff << 32))
+	.long 0
+.endm
+.macro EXPT_GATE_64 offset
+	.long (\offset & 0xFFFF) | (CODE_DESC_64 - NULL_DESC_64) << 16
+	.long ((\offset & 0xFFFF0000) << 16) | (PRESENT << 15) | \
+	(RING0 << 13) | (EXCEPTION_GATE << 8) | (IST << 0)
+	.long (\offset & (0xffffffff << 32))
+	.long 0	
+.endm
+
+.macro  IDT_TABLE_64 from, to
+	pushq %rax
+	movq $\from, %rax
+	shlq $16, %rax
+	orq $0x2, %rax
+	xchgq %rax, (%rsp)
+	jmp int_expt_handler_64
+.if     \to-\from
+	IDT_TABLE_64     "(\from+1)",\to
+.endif
+.endm
+	
+long_mode:
+        // Set up the stack pointer and call into C.
+	movq    $(STACK_START-16), %rsp
+	movq 	%rsp, %rbp
+        movq    $(DATA_DESC_64 - NULL_DESC_64), %rax    // Our data segment selector
+        movq    %rax, %ds      // -> DS: Data Segment
+        movq    %rax, %es      // -> ES: Extra Segment
+        movq    %rax, %ss      // -> SS: Stack Segment
+	call 	enable_sse
+	call    fill_idt
+	//movq 	$idt, %rsi
+	//movq 	$0x40, %rdi
+	//call 	hex_dump_64
+        movq    $idt_descriptor, %rax
+        lidtq   (%rax)
+	//int 	$0x01
+	hlt
+	
 enable_sse:
 	pushq %rax
 	
@@ -237,20 +227,41 @@ enable_sse:
 
         popq %rax
         retq
-long_mode:
-trampoline64:
-// Set up the stack pointer and call into C.
-	movq    $(STACK_START-16), %rsp
-	movq 	%rsp, %rbp
-	call 	enable_sse
-	hlt
-	
+
+// rsi has address, rdi has size	
+hex_dump_64:
+	pushq %rax
+	pushq %rdx
+	addq %rsi, %rdi
+	movw $SERIAL_PORT, %dx
+.loop2:
+	cmpq %rsi, %rdi
+	jz .halt2
+	movb (%rsi), %al
+	out %al, (%dx)
+	incq %rsi
+	jmp .loop2
+.halt2:
+	movb $0xaa, %al
+	out %al, (%dx)
+	movb $0xbb, %al
+	out %al, (%dx)
+	movb $0xcc, %al
+	out %al, (%dx)
+	movb $0xdd, %al
+	out %al, (%dx)	
+	popq %rdx
+	popq %rax
+	ret
 	
 .p2align 4
-# the global descriptor table
+// the global descriptor table
 gdt64:
+NULL_DESC_64:	
 	.quad 0
+CODE_DESC_64:	
 	.quad 0x00AF98000000FFFF
+DATA_DESC_64:
 	.quad 0x00CF92000000FFFF
 gdt64_end:
 .p2align 4
@@ -258,8 +269,8 @@ gdtr64:
 	.word gdt64_end - gdt64 - 1
 	.quad gdt64
 
-# paging structures
-#	.section .paging
+// paging structures
+// .section .paging
 .section .text
 .p2align 12
 .globl boot_p4
@@ -282,3 +293,61 @@ scratch_pad:
 .rept 512
 	.byte 0
 .endr
+
+fill_idt:
+	pushq %rbp
+	movq %rsp, %rbp
+	subq $24, %rsp
+	movq $0, %rax
+	movq $idt, %rbx	// where to store
+	movq $int_expt_trampoline, %rcx
+.loop1:
+	cmpq $256, %rax
+	jz .halt1
+	movl %ecx, %edx
+	shll $16, %edx
+	shrl $16, %edx
+	orl %edx, (%rbx)
+	addq $4, %rbx
+	movq %rcx, %rdx
+	shrq $16, %rdx
+	shlq $16, %rdx
+	orq %rdx, (%rbx)
+	addl $1, %eax
+	addq $12, %rbx
+	addq $25, %rcx
+	jmp .loop1
+.halt1:
+	//mov $idt, %esi
+	//mov $32, %edi
+	//call hex_dump_32
+	movq %rbp, %rsp
+	popq %rbp
+	ret
+	
+int_expt_trampoline:
+IDT_TABLE_64 0, 100
+IDT_TABLE_64 101, 201
+IDT_TABLE_64 202, 255	
+int_expt_handler_64:
+	cli
+	movq %rsp, %rsi
+	movq $48, %rdi
+	call hex_dump_64	
+	popq %rax
+	// iret must know stack is 64 bit return. amd-vol2-8.9.5
+	iretq
+
+.p2align 4
+idt:
+	.rept 20
+		EXPT_GATE_64 offset=0
+	.endr
+	.rept 236
+		INT_GATE_64 offset=0
+	.endr
+	
+idt_end:	
+idt_descriptor :
+    .word idt_end - idt - 1 // Size of our idt, always one less than the actual size
+    .quad idt // Start address of our idt	
