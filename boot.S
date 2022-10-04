@@ -196,20 +196,29 @@ detect_long_mode:
 	
 long_mode:
         // Set up the stack pointer and call into C.
+	rdtscp
+	shlq $32, %rdx
+	orq %rdx, %rax
+	movq %rax, %r11		
 	movq    $(STACK_START-16), %rsp
 	movq 	%rsp, %rbp
         movq    $(DATA_DESC_64 - NULL_DESC_64), %rax    // Our data segment selector
         movq    %rax, %ds      // -> DS: Data Segment
         movq    %rax, %es      // -> ES: Extra Segment
         movq    %rax, %ss      // -> SS: Stack Segment
-	call 	enable_sse
-	call    fill_idt
+	//call 	enable_sse
+	//call    fill_idt
 	//movq 	$idt, %rsi
 	//movq 	$0x40, %rdi
 	//call 	hex_dump_64
         movq    $idt_descriptor, %rax
         lidtq   (%rax)
 	//int 	$0x01
+	rdtscp
+	movq %rdx, %r12
+	shlq $32, %r12
+	orq %rax, %r12
+	subq %r11, %r12
 	hlt
 	
 enable_sse:
