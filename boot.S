@@ -68,30 +68,6 @@ __reset:
 	jmp $0x08, $long_mode	// switch to long mode
 
 // esi has address, edi has size	
-hex_dump_16:
-	push %eax
-	push %edx
-	addl %esi, %edi
-	movw $SERIAL_PORT, %dx
-.loop0:
-	cmp %esi, %edi
-	jz .halt0
-	movb (%esi), %al
-	out %al, (%dx)
-	inc %esi
-	jmp .loop0
-.halt0:
-	movb $0xaa, %al
-	out %al, (%dx)
-	movb $0xbb, %al
-	out %al, (%dx)
-	movb $0xcc, %al
-	out %al, (%dx)
-	movb $0xdd, %al
-	out %al, (%dx)	
-	pop %edx
-	pop %eax
-	ret
 	
 check_cpuid:
 	// Check if CPUID is supported by attempting to flip the ID bit (bit 21) in
@@ -142,29 +118,6 @@ detect_long_mode:
 	test $(1 << 29), %edx      // Test if the LM-bit, which is bit 29, is set in the D-register.
 	jz .NoLongMode1            // They aren't, there is no long mode.
 	ret
-
-//.p2align 4
-//NULL_DESC:
-//	.quad 0x0000000000000000
-//
-//CODE_DESC:
-//	.word 0xFFFF       // limit low
-//	.word 0            // base low
-//	.byte 0            // base middle
-//	.byte 0b10011010    // access
-//	.byte 0b11001111    // granularity
-//	.byte 0            // base high
-//
-//DATA_DESC:
-//	.word 0xFFFF       // data descriptor
-//	.word 0            // limit low
-//	.byte 0            // base low
-//	.byte 0b10010010    // access
-//	.byte 0b11001111    // granularity
-//	.byte 0            // base high
-//gdtr:
-//	.word gdtr - NULL_DESC - 1
-//	.long NULL_DESC
 	
 .code64
 .macro INT_GATE_64 offset
@@ -193,37 +146,9 @@ detect_long_mode:
 	IDT_TABLE_64     "(\from+1)",\to
 .endif
 .endm
-	
-long_mode:
-        // Set up the stack pointer and call into C.
-	rdtscp
-	shlq $32, %rdx
-	orq %rdx, %rax
-	movq %rax, %r11		
-	movq    $(STACK_START-16), %rsp
-	movq 	%rsp, %rbp
-        movq    $(DATA_DESC_64 - NULL_DESC_64), %rax    // Our data segment selector
-        movq    %rax, %ds      // -> DS: Data Segment
-        movq    %rax, %es      // -> ES: Extra Segment
-        movq    %rax, %ss      // -> SS: Stack Segment
-	//call 	enable_sse
-	//call    fill_idt
-	//movq 	$idt, %rsi
-	//movq 	$0x40, %rdi
-	//call 	hex_dump_64
-        movq    $idt_descriptor, %rax
-        lidtq   (%rax)
-	//int 	$0x01
-	rdtscp
-	movq %rdx, %r12
-	shlq $32, %r12
-	orq %rax, %r12
-	subq %r11, %r12
-	hlt
-	
+
 enable_sse:
 	pushq %rax
-	
 	// setup sse
 	movq %cr0, %rax
 	and $0xFFFB, %ax          // clear coprocessor emulation CR0.EM
@@ -262,46 +187,6 @@ hex_dump_64:
 	popq %rdx
 	popq %rax
 	ret
-	
-.p2align 4
-// the global descriptor table
-gdt64:
-NULL_DESC_64:	
-	.quad 0
-CODE_DESC_64:	
-	.quad 0x00AF98000000FFFF
-DATA_DESC_64:
-	.quad 0x00CF92000000FFFF
-gdt64_end:
-.p2align 4
-gdtr64:
-	.word gdt64_end - gdt64 - 1
-	.quad gdt64
-
-// paging structures
-// .section .paging
-.section .text
-.p2align 12
-.globl boot_p4
-boot_p4:
-        .quad (boot_p3 + PG_PRESENT + PG_WRITABLE)
-        .fill 511, 8, 0
-
-boot_p3:
-        .quad (boot_p2 + PG_PRESENT + PG_WRITABLE)
-        .fill 511, 8, 0
-
-boot_p2:
-.set pg, 0
-  .rept 512
-    .quad (pg + PG_PRESENT + PG_WRITABLE + PG_BIG)
-    .set pg, pg+(PAGE_SIZE * 512)
-  .endr
-
-scratch_pad:
-.rept 512
-	.byte 0
-.endr
 
 fill_idt:
 	pushq %rbp
@@ -333,6 +218,67 @@ fill_idt:
 	movq %rbp, %rsp
 	popq %rbp
 	ret
+	
+long_mode:
+        // Set up the stack pointer and call into C.
+	movq    $(STACK_START-16), %rsp
+	movq 	%rsp, %rbp
+        movq    $(DATA_DESC_64 - NULL_DESC_64), %rax    // Our data segment selector
+        movq    %rax, %ds      // -> DS: Data Segment
+        movq    %rax, %es      // -> ES: Extra Segment
+        movq    %rax, %ss      // -> SS: Stack Segment
+	call 	enable_sse
+	call    fill_idt
+	//movq 	$idt, %rsi
+	//movq 	$0x40, %rdi
+	//call 	hex_dump_64
+        movq    $idt_descriptor, %rax
+        lidtq   (%rax)
+	callq   main
+	hlt
+
+	
+
+.section ".data"	
+.p2align 4
+// the global descriptor table
+gdt64:
+NULL_DESC_64:	
+	.quad 0
+CODE_DESC_64:	
+	.quad 0x00AF98000000FFFF
+DATA_DESC_64:
+	.quad 0x00CF92000000FFFF
+gdt64_end:
+.p2align 4
+gdtr64:
+	.word gdt64_end - gdt64 - 1
+	.quad gdt64
+
+// paging structures
+// .section .paging
+.p2align 12
+.globl boot_p4
+boot_p4:
+        .quad (boot_p3 + PG_PRESENT + PG_WRITABLE)
+        .fill 511, 8, 0
+
+boot_p3:
+        .quad (boot_p2 + PG_PRESENT + PG_WRITABLE)
+        .fill 511, 8, 0
+
+boot_p2:
+.set pg, 0
+  .rept 512
+    .quad (pg + PG_PRESENT + PG_WRITABLE + PG_BIG)
+    .set pg, pg+(PAGE_SIZE * 512)
+  .endr
+
+scratch_pad:
+.rept 512
+	.byte 0
+.endr
+
 	
 int_expt_trampoline:
 IDT_TABLE_64 0, 100

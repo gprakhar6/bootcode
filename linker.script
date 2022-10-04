@@ -18,14 +18,14 @@ SECTIONS
   . = ALIGN(PAGE_SIZE);
   USER_CODE_START = .;
   .text   : { boot.o(.text) *(.text) }
+  USER_CODE_SIZE = . - USER_CODE_START;
       /* end user code section*/
-
       /* rodata section */
   . = ALIGN(PAGE_SIZE);
+  RODATA_START = .;
   .rodata : {*.(rodata)}
       /* end rodata section */
-      
-  USER_CODE_SIZE = . - USER_CODE_START;
+  RODATA_SIZE = . - RODATA_START;
       
   CODE_SIZE = . - CODE_START;
   /* end code section */

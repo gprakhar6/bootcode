@@ -3,5 +3,6 @@
 *.bin
 *.dump
 *.bkp
+*.bkp.*
 *.txt
 main
