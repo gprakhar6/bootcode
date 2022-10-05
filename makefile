@@ -6,24 +6,33 @@
 #	objcopy -O binary --only-section=.text main main.bin
 #	gcc -Wall -Werror -nostdlib -ffreestanding -fno-builtin -Tlinker.script main.c -o main
 
-C_FILES := $(shell find . -type f -name "*.c")
-OBJS := $(patsubst %.c,%.o,$(C_FILES)) boot.o
+OBJDIR = obj
+BINDIR = bin
+C_FILES := $(shell find * -type f -name "*.c")
+ASM_FILES := $(shell find * -type f -name "*.S")
+OBJS := $(patsubst %.c,%.o,$(addprefix $(OBJDIR)/, $(C_FILES))) \
+	$(patsubst %.S,%.o,$(addprefix $(OBJDIR)/, $(ASM_FILES)))
 
 .PHONY : all main
-all: main
+all: dirtree main
+
+dirtree:
+	@mkdir -p $(OBJDIR)
+	@mkdir -p $(BINDIR)
+	@for file in $(OBJS); do echo `dirname $$file`; done | sort -u | xargs -I {} mkdir -p {}
 
 main: $(OBJS)
-	ld -nostdlib -Tlinker.script $(OBJS) -o main
+	ld -nostdlib -Tlinker.script $(OBJS) -o $(BINDIR)/main
+	objdump -D $(BINDIR)/main > $(BINDIR)/main.dump
 
-boot.o: boot.S
-	gcc -c boot.S -o boot.o
+$(OBJDIR)/%.o: %.S
+	gcc -c $< -o $@
 
-%.o: %.c
+$(OBJDIR)/%.o: %.c
 	gcc -Wall -Werror -ffreestanding -fno-builtin -c $< -o $@
 
 clean:
-	rm -rf *.o main
+	rm -rf $(OBJS) $(BINDIR)/main
+	find . -type f -name "*~" | xargs -I {} rm -rf {}
 
-dump:
-	objdump -D main > main.dump
 #	objcopy -O binary --only-section=.text main main.bin

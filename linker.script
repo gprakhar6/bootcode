@@ -17,7 +17,7 @@ SECTIONS
       /* user code section */
   . = ALIGN(PAGE_SIZE);
   USER_CODE_START = .;
-  .text   : { boot.o(.text) *(.text) }
+  .text   : { *boot.o(.text) *(.text) }
   USER_CODE_SIZE = . - USER_CODE_START;
       /* end user code section*/
       /* rodata section */
