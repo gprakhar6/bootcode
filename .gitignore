@@ -5,3 +5,5 @@
 *.txt
 main
 bkup/*
+obj/*
+bin/*
