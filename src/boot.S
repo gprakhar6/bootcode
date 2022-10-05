@@ -162,6 +162,18 @@ enable_sse:
         popq %rax
         retq
 
+.globl tsc
+tsc:	
+	rdtscp
+	retq
+//  left-to-right: %rdi, %rsi, %rdx, %rcx, %r8, and %r9.
+// preserve rsp, rbp, rbx, r12-r15	
+.globl _putchar	
+_putchar:
+	movq %rdi, %rax
+	movw $SERIAL_PORT, %dx
+	out  %al, (%dx)
+	retq
 // rsi has address, rdi has size	
 hex_dump_64:
 	pushq %rax
