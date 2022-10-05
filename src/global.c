@@ -1,6 +1,3 @@
-#ifndef __CUSTOM_GLOBAL_H__
-#define __CUSTOM_GLOBAL_H__
-
 /*
 = : page align
   -------------- CODE_START
@@ -26,7 +23,8 @@
   -------------- STACK_START     
 
 */
-#include <stdint.h>
+#include "globvar.h"
+
 extern char CODE_START[], CODE_SIZE[];
 extern char LAYOUT_START[], LAYOUT_SIZE[];
 extern char USER_CODE_START[], USER_CODE_SIZE[];
@@ -44,6 +42,3 @@ __attribute__((section(".layout"))) const uint64_t data_size = (uint64_t)&DATA_S
 __attribute__((section(".layout"))) const uint64_t stack_start = (uint64_t)&STACK_START;
 __attribute__((section(".layout"))) const uint64_t stack_size = (uint64_t)&STACK_SIZE;
 
-
-    
-#endif

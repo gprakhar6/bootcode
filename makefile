@@ -30,8 +30,9 @@ dirtree:
 	@for file in $(OBJS); do echo `dirname $$file`; done | sort -u | xargs -I {} mkdir -p {}
 
 main: $(OBJS)
-	ld -nostdlib -Tlinker.script $(OBJS) -o $(BINDIR)/main
-	objdump -D $(BINDIR)/main > $(BINDIR)/main.dump
+	ld -nostdlib -Tlinker.script -Map=$(BINDIR)/main.map $(OBJS) -o $(BINDIR)/main
+	@objdump -D $(BINDIR)/main > $(BINDIR)/main.dump
+	@cat $(BINDIR)/main.map | grep 'STACK_START = .'
 
 $(OBJDIR)/%.o: %.S
 	gcc $(INCLUDE_FLAGS) -c $< -o $@

@@ -162,6 +162,12 @@ enable_sse:
         popq %rax
         retq
 
+// input in in rdi
+.globl flush_tss
+flush_tss:
+	ltr (%rdi)
+	retq
+// we use just rax, rdx we will discard	
 .globl tsc
 tsc:	
 	rdtscp
@@ -254,6 +260,8 @@ long_mode:
 .section ".data"	
 .p2align 4
 // the global descriptor table
+.globl __gdt64_start	
+__gdt64_start:
 gdt64:
 NULL_DESC_64:	
 	.quad 0
@@ -266,7 +274,8 @@ gdt64_end:
 gdtr64:
 	.word gdt64_end - gdt64 - 1
 	.quad gdt64
-
+.fill 16, 8, 0
+	
 // paging structures
 // .section .paging
 .p2align 12
