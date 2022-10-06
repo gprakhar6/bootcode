@@ -162,10 +162,46 @@ enable_sse:
         popq %rax
         retq
 
-// input in in rdi
+// void jump_usermode(void *rip, void *stack);	
+.globl jump_usermode	
+jump_usermode:
+	movq $0x10, %rax // user data segment
+	pushq %rax
+	pushq %rsi     // stack address
+	movq $0x2, %rax // RFLAGS, TBD
+	pushq %rax
+	movq $0x0c, %rax // user code segment
+	pushq %rax
+	pushq %rdi // RIP
+	iretq
+
+.globl reload_gdt
+reload_gdt:
+	movq $gdtr64, %rax
+	lgdt (%rax)	
+	pushq $0x08                 // Push code segment to stack, 0x08 is a stand-in for your code segment
+	lea (.reload_gdt), %rax 
+	pushq %rax                  // Push this value to the stack
+	retfq                       // Perform a far return, RETFQ or LRETQ depending on syntax
+	nop
+	nop
+.reload_gdt:
+   // Reload data segment registers
+	movw   $0x10, %ax  // 0x10 is a stand-in for your data segment
+	movw   %ax,   %ds 
+	movw   %ax,   %es 
+	movw   %ax,   %fs 
+	movw   %ax,   %gs 
+	movw   %ax,   %ss
+	retq
+	
+// 5th segment is the tss segment
 .globl flush_tss
 flush_tss:
-	ltr (%rdi)
+	mfence	
+	call reload_gdt
+	movw $((0x5 << 3) | 0x0), %ax
+	ltr %ax
 	retq
 // we use just rax, rdx we will discard	
 .globl tsc
@@ -260,8 +296,8 @@ long_mode:
 .section ".data"	
 .p2align 4
 // the global descriptor table
-.globl __gdt64_start	
-__gdt64_start:
+.globl gdt64_start_c
+gdt64_start_c:
 gdt64:
 NULL_DESC_64:	
 	.quad 0
@@ -269,12 +305,16 @@ CODE_DESC_64:
 	.quad 0x00AF98000000FFFF
 DATA_DESC_64:
 	.quad 0x00CF92000000FFFF
+	.quad 0x0000000000000000 // user code seg
+	.quad 0x0000000000000000 // user data seg
+	.quad 0x0000000000000000 // tss seg .quad 0x0000890050000067
+	.quad 0x0000000000000000
+//.fill 16, 8, 0	
 gdt64_end:
 .p2align 4
 gdtr64:
 	.word gdt64_end - gdt64 - 1
 	.quad gdt64
-.fill 16, 8, 0
 	
 // paging structures
 // .section .paging
@@ -304,13 +344,29 @@ scratch_pad:
 int_expt_trampoline:
 IDT_TABLE_64 0, 100
 IDT_TABLE_64 101, 201
-IDT_TABLE_64 202, 255	
+IDT_TABLE_64 202, 255
+
+.macro SAVE_CONTEXT
+
+
+	pushq %rax
+	pushq %rdi
+.endm
+
+.macro RESTORE_CONTEXT
+
+
+	popq %rdi
+	popq %rax
+.endm	
+.globl high_interrupt_handler	
 int_expt_handler_64:
 	cli
-	movq %rsp, %rsi
-	movq $48, %rdi
-	call hex_dump_64	
-	popq %rax
+SAVE_CONTEXT
+	leaq 16(%rsp), %rdi
+	callq high_interrupt_handler
+RESTORE_CONTEXT	
+	hlt
 	// iret must know stack is 64 bit return. amd-vol2-8.9.5
 	iretq
 

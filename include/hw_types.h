@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 typedef union {
-    struct {	
+    struct __attribute__((packed)) {	
 	uint32_t ignored0       : 16;
 	uint32_t ignored1       : 24; 
 	uint32_t ignored2       :  1;
@@ -20,9 +20,9 @@ typedef union {
 	uint32_t hardcode2_0    :  1;
 	uint32_t ignored6       :  1;
 	uint32_t ignored7       :  8;	
-    } __attribute__((packed)) CS;
+    } CS;
 
-    struct {
+    struct __attribute__((packed)) {
 	uint32_t ignored0       : 16;
 	uint32_t ignored1       : 24; 
 	uint32_t ignored2       :  1;
@@ -38,10 +38,10 @@ typedef union {
 	uint32_t ignored9	:  1;
 	uint32_t ignored10      :  1;
 	uint32_t ignored11      :  8;
-    } __attribute__((packed)) DS;
+    } DS;
 } gdt_entry_t;
 
-struct tss_entry_t {
+struct __attribute__((packed)) tss_entry_t {
     uint32_t reserved0	: 32;
     uint64_t rsp0	: 64;
     uint64_t rsp1	: 64;
@@ -57,7 +57,23 @@ struct tss_entry_t {
     uint64_t reserved2	: 64;
     uint16_t reserved3	: 16;
     uint16_t iomap_base : 16;
-} __attribute__((packed));
+};
 
-
+struct __attribute__((packed)) sys_desc_t {
+    uint16_t limit_15_0		: 16;
+    uint32_t base_23_0		: 24;
+    uint16_t type		: 4;
+    uint16_t hardcode0_0	: 1;
+    uint16_t dpl		: 2;
+    uint16_t present		: 1;
+    uint16_t limit_19_16	: 4;
+    uint16_t avl		: 1;
+    uint16_t reserved0		: 2;
+    uint16_t granularity	: 1;
+    uint16_t base_31_24		: 8;
+    uint32_t base_64_32		: 32;
+    uint16_t reserved1		: 8;
+    uint16_t hardcode1_0	: 5;
+    uint32_t reserved2		: 19;
+};
 #endif

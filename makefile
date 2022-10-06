@@ -17,6 +17,10 @@ DEPENDS := $(patsubst %.c,%.d,$(addprefix $(OBJDIR)/, $(C_FILES)))
 
 INCLUDE_DIRS := $(shell find * -type f -name "*.h" -exec dirname {} \; | sort -u)
 INCLUDE_FLAGS := $(addprefix -I, $(INCLUDE_DIRS))
+
+#C_FLAGS := -Wall -Werror -ffreestanding -fno-builtin
+C_FLAGS := -Wall -ffreestanding -fno-builtin
+
 .PHONY : all main
 all: depend dirtree main
 depend: $(DEPENDS)
@@ -38,7 +42,7 @@ $(OBJDIR)/%.o: %.S
 	gcc $(INCLUDE_FLAGS) -c $< -o $@
 
 $(OBJDIR)/%.o: %.c
-	gcc -Wall -Werror -ffreestanding -fno-builtin -O2 $(INCLUDE_FLAGS) -c $< -o $@
+	gcc $(C_FLAGS) -O2 $(INCLUDE_FLAGS) -c $< -o $@
 
 clean:
 	rm -rf $(OBJS) $(BINDIR)/main $(DEPENDS)

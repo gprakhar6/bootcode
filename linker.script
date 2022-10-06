@@ -34,7 +34,9 @@ SECTIONS
   /* data section */
   . = ALIGN(PAGE_SIZE);
   DATA_START = .;
+  BSS_START = .;
   .bss    : { *.(.bss)}
+  BSS_SIZE = . - BSS_START;
   .data   : { *(.data) }
   . = ALIGN(8); /* for some reason align it to 8 bytes */
   DATA_SIZE = . - DATA_START;

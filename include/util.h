@@ -5,6 +5,5 @@
 #include <stddef.h>
 
 extern uint64_t tsc(); // defined in boot.S
-extern void flush_tss(void *tss); // defined in boot.S
 void *memset(void *s, int c, size_t n);
 #endif
