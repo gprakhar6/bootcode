@@ -23,19 +23,25 @@ SECTIONS
       /* rodata section */
   . = ALIGN(PAGE_SIZE);
   RODATA_START = .;
-  .rodata : {*.(rodata)}
+  .rodata : {*(.rodata)}
       /* end rodata section */
   RODATA_SIZE = . - RODATA_START;
-      
+  .interrupt_handler : {*(..interrupt_handler)}
+  .interrupt_table : {*(.interrupt_table)}
+  .interrupt_descriptors : {*(.interrupt_descriptors)}
   CODE_SIZE = . - CODE_START;
   /* end code section */
 
 
   /* data section */
   . = ALIGN(PAGE_SIZE);
+  PAGE_DS_START = .;
+  .paging : {*(.paging)}
+  PAGE_DS_SIZE = . - PAGE_DS_START;
+  . = ALIGN(PAGE_SIZE);
   DATA_START = .;
   BSS_START = .;
-  .bss    : { *.(.bss)}
+  .bss    : { *(.bss)}
   BSS_SIZE = . - BSS_START;
   .data   : { *(.data) }
   . = ALIGN(8); /* for some reason align it to 8 bytes */

@@ -9,6 +9,8 @@ extern const uint64_t layout_start;
 extern const uint64_t layout_size;
 extern const uint64_t user_code_start;
 extern const uint64_t user_code_size;
+extern const uint64_t page_ds_start;
+extern const uint64_t page_ds_size;
 extern const uint64_t data_start;
 extern const uint64_t data_size;
 extern const uint64_t bss_start;

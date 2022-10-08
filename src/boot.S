@@ -120,32 +120,6 @@ detect_long_mode:
 	ret
 	
 .code64
-.macro INT_GATE_64 offset
-	.long (\offset & 0xFFFF) | (CODE_DESC_64 - NULL_DESC_64) << 16
-	.long ((\offset & 0xFFFF0000) << 16) | (PRESENT << 15) | \
-	(RING0 << 13) | (INTERRUPT_GATE << 8) | (IST << 0)
-	.long (\offset & (0xffffffff << 32))
-	.long 0
-.endm
-.macro EXPT_GATE_64 offset
-	.long (\offset & 0xFFFF) | (CODE_DESC_64 - NULL_DESC_64) << 16
-	.long ((\offset & 0xFFFF0000) << 16) | (PRESENT << 15) | \
-	(RING0 << 13) | (EXCEPTION_GATE << 8) | (IST << 0)
-	.long (\offset & (0xffffffff << 32))
-	.long 0	
-.endm
-
-.macro  IDT_TABLE_64 from, to
-	pushq %rax
-	movq $\from, %rax
-	shlq $16, %rax
-	orq $0x2, %rax
-	xchgq %rax, (%rsp)
-	jmp int_expt_handler_64
-.if     \to-\from
-	IDT_TABLE_64     "(\from+1)",\to
-.endif
-.endm
 
 enable_sse:
 	pushq %rax
@@ -317,8 +291,8 @@ gdtr64:
 	.quad gdt64
 	
 // paging structures
-// .section .paging
-.p2align 12
+.section .paging
+.p2align 12 // page align
 .globl boot_p4
 boot_p4:
         .quad (boot_p3 + PG_PRESENT + PG_WRITABLE)
@@ -335,17 +309,31 @@ boot_p2:
     .set pg, pg+(PAGE_SIZE * 512)
   .endr
 
+// maybe this is useless? delete it later	
 scratch_pad:
 .rept 512
 	.byte 0
 .endr
 
-	
+.section .interrupt_table
+
+.macro  IDT_TABLE_64 from, to
+	pushq %rax
+	movq $\from, %rax
+	shlq $16, %rax
+	orq $0x2, %rax
+	xchgq %rax, (%rsp)
+	jmp int_expt_handler_64
+.if     \to-\from
+	IDT_TABLE_64     "(\from+1)",\to
+.endif
+.endm	
 int_expt_trampoline:
 IDT_TABLE_64 0, 100
 IDT_TABLE_64 101, 201
 IDT_TABLE_64 202, 255
 
+.section .interrupt_handler
 .macro SAVE_CONTEXT
 
 
@@ -370,6 +358,22 @@ RESTORE_CONTEXT
 	// iret must know stack is 64 bit return. amd-vol2-8.9.5
 	iretq
 
+.section .interrupt_descriptors	
+.macro INT_GATE_64 offset
+	.long (\offset & 0xFFFF) | (CODE_DESC_64 - NULL_DESC_64) << 16
+	.long ((\offset & 0xFFFF0000) << 16) | (PRESENT << 15) | \
+	(RING0 << 13) | (INTERRUPT_GATE << 8) | (IST << 0)
+	.long (\offset & (0xffffffff << 32))
+	.long 0
+.endm
+.macro EXPT_GATE_64 offset
+	.long (\offset & 0xFFFF) | (CODE_DESC_64 - NULL_DESC_64) << 16
+	.long ((\offset & 0xFFFF0000) << 16) | (PRESENT << 15) | \
+	(RING0 << 13) | (EXCEPTION_GATE << 8) | (IST << 0)
+	.long (\offset & (0xffffffff << 32))
+	.long 0	
+.endm
+	
 .p2align 4
 idt:
 	.rept 20
