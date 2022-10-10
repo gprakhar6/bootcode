@@ -4,6 +4,8 @@
 #include "util.h"
 #include "hw_types.h"
 #include "globvar.h"
+#include "mm_types.h"
+#include "mm.h"
 
 int user_test_function();
 void init_boot();
@@ -11,20 +13,29 @@ extern void jump_usermode(void *rip, void *stack);
 extern void flush_tss();
 
 extern uint64_t gdt64_start_c[];
+extern uint64_t boot_p4[];
 struct tss_entry_t __attribute__((aligned(64))) tss_seg;
 uint8_t __attribute__((aligned(16))) user_stack[16*32];
 
 void user_test_func() {
     int a;
     a = 1;
-    printf("a = %d\n", a);
+    return;
 }
 int main()
 {
+    pde_t *pde;
     printf("Calling init boot\n");
     init_boot();
+    pde = addr_to_pde((void *)boot_p4, 0x200000);
+    pde->pde |= U_BIT; // allow user access
+    memcpy(0x200000, &user_test_func, 16);
+    hexdump(0x200000, 16);
+    printf("sof = %d\n", sizeof(user_test_func));
+    printf("pde in  main = %llX\n", pde->pde);
     printf("Jumping to user func\n");
-    jump_usermode(&user_test_func, user_stack);
+    jump_usermode(0x200000, 0x200000 + 0x1000);
+    //jump_usermode(user_test_func, user_stack + sizeof(user_stack) - 16);
     printf("Not expected to be here");
     return 0;
 }
@@ -55,6 +66,7 @@ void fill_tss(struct tss_entry_t *tss, struct sys_desc_t *tss_desc)
 void init_CS(gdt_entry_t *s)
 {
     memset(s, 0, sizeof(*s));
+    s->CS.seg_limit_15_0 = 0xFFFF;
     s->CS.hardcode0_1	= 1;
     s->CS.hardcode1_1	= 1;
     s->CS.hardcode2_0	= 0;
@@ -64,9 +76,11 @@ void init_CS(gdt_entry_t *s)
 void init_DS(gdt_entry_t *s)
 {
     memset(s, 0, sizeof(*s));
+    s->DS.seg_limit_15_0 = 0xFFFF;
     s->DS.hardcode0_0	= 0;
     s->DS.hardcode1_1	= 1;
     s->DS.present	= 1;
+    s->DS.write         = 1;
 }
 void fill_user_mode_gdt()
 {
@@ -78,21 +92,24 @@ void fill_user_mode_gdt()
 
     init_CS(ucs);
     ucs->CS.DPL = 3;
-    
+    hexdump(ucs, 8);
     init_DS(uds);
+    uds->DS.DPL = 3;
+    hexdump(uds, 8);
 }
 void init_boot()
 {
+    int i;
     gdt_entry_t *gdt_start = (gdt_entry_t *)gdt64_start_c;
     // zero out the bss section
     memset((void *)bss_start, 0, bss_size);
     printf("Filling TSS\n");
     fill_tss(&tss_seg, (struct sys_desc_t *)&gdt_start[5]);
-//    for(i = 0; i <= 6; i++)
-//	printf("descriptor[%d] = %016llX\n", i, *(uint64_t *)&gdt_start[i]);
     printf("Flushing TSS\n");
     flush_tss();
     printf("Filling user mode gdt\n");
     fill_user_mode_gdt();
+    for(i = 0; i <= 6; i++)
+	printf("descriptor[%d] = %016llX\n", i, *(uint64_t *)&gdt_start[i]);    
 }
 

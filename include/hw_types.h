@@ -5,7 +5,7 @@
 
 typedef union {
     struct __attribute__((packed)) {	
-	uint32_t ignored0       : 16;
+	uint32_t seg_limit_15_0 : 16;
 	uint32_t ignored1       : 24; 
 	uint32_t ignored2       :  1;
 	uint32_t ignored3       :  1;
@@ -23,14 +23,14 @@ typedef union {
     } CS;
 
     struct __attribute__((packed)) {
-	uint32_t ignored0       : 16;
+	uint32_t seg_limit_15_0 : 16;
 	uint32_t ignored1       : 24; 
 	uint32_t ignored2       :  1;
-	uint32_t ignored3       :  1;
+	uint32_t write          :  1;
 	uint32_t ignored4	:  1;
 	uint32_t hardcode0_0    :  1;
 	uint32_t hardcode1_1    :  1;
-	uint32_t ignored5       :  2;
+	uint32_t DPL            :  2; // privilege level
 	uint32_t present        :  1;
 	uint32_t ignored6       :  4;
 	uint32_t ignored7       :  1;

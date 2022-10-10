@@ -6,4 +6,6 @@
 
 extern uint64_t tsc(); // defined in boot.S
 void *memset(void *s, int c, size_t n);
+void *memcpy (void *dest, void *src, register size_t len);
+void hexdump(void *ptr, int len);
 #endif
