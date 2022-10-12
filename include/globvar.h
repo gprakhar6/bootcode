@@ -19,4 +19,5 @@ extern const uint64_t stack_start;
 extern const uint64_t stack_size;
 
 
+//extern uint64_t t1, t2;
 #endif

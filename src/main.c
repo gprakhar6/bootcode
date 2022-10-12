@@ -18,19 +18,23 @@ struct tss_entry_t __attribute__((aligned(64))) tss_seg;
 uint8_t __attribute__((aligned(16))) user_stack[16*32];
 
 void user_test_func() {
-    int a;
-    a = 1;
+    asm("int $0x80");
     return;
 }
 int main()
 {
     pde_t *pde;
+    pde_t *p1,*p2,*p3;
+    pde_t **pe[3] = {&p1, &p2, &p3};
     printf("Calling init boot\n");
     init_boot();
-    pde = addr_to_pde((void *)boot_p4, 0x200000);
-    pde->pde |= U_BIT; // allow user access
-    memcpy(0x200000, &user_test_func, 16);
-    hexdump(0x200000, 16);
+    pde = addr_to_pde((void *)boot_p4, 0x200000, (uint64_t **)pe);
+    p1->pde |= U_BIT;
+    p2->pde |= U_BIT;
+    p3->pde |= U_BIT; // need to update TLB maybe?
+    //pde->pde |= U_BIT; // allow user access
+    memcpy(0x200000, &user_test_func, 24);
+    hexdump(0x200000, 24);
     printf("sof = %d\n", sizeof(user_test_func));
     printf("pde in  main = %llX\n", pde->pde);
     printf("Jumping to user func\n");
@@ -54,9 +58,9 @@ void fill_tss(struct tss_entry_t *tss, struct sys_desc_t *tss_desc)
     sz = sizeof(*tss) - 1;
     tss_desc->limit_15_0 = sz & 0xFFFF;
     tss_desc->limit_19_16 = (sz & 0xF0000) >> 16;
-    tss_desc->base_23_0 = (uint64_t)tss & 0xFFFFF;
-    tss_desc->base_31_24 = ((uint64_t)tss & 0xFF00000) >> 24;
-    tss_desc->base_64_32 = ((uint64_t)tss & 0xFFFFFFFF0000000) >> 32;
+    tss_desc->base_23_0 = (uint64_t)tss & 0xFFFFFF;
+    tss_desc->base_31_24 = ((uint64_t)tss & 0xFF000000) >> 24;
+    tss_desc->base_64_32 = ((uint64_t)tss & 0xFFFFFFFF00000000) >> 32;
     tss_desc->dpl = 0;
     tss_desc->present = 1;
     tss_desc->type = 0x9; // available tss
@@ -66,7 +70,7 @@ void fill_tss(struct tss_entry_t *tss, struct sys_desc_t *tss_desc)
 void init_CS(gdt_entry_t *s)
 {
     memset(s, 0, sizeof(*s));
-    s->CS.seg_limit_15_0 = 0xFFFF;
+    //s->CS.seg_limit_15_0 = 0xFFFF;
     s->CS.hardcode0_1	= 1;
     s->CS.hardcode1_1	= 1;
     s->CS.hardcode2_0	= 0;
@@ -76,7 +80,7 @@ void init_CS(gdt_entry_t *s)
 void init_DS(gdt_entry_t *s)
 {
     memset(s, 0, sizeof(*s));
-    s->DS.seg_limit_15_0 = 0xFFFF;
+    //s->DS.seg_limit_15_0 = 0xFFFF;
     s->DS.hardcode0_0	= 0;
     s->DS.hardcode1_1	= 1;
     s->DS.present	= 1;

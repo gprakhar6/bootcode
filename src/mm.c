@@ -7,7 +7,7 @@
 
 #define EMASK (0x00FFFFFFFFFFFC00)
 
-pde_t* addr_to_pde(void *cr3, uint64_t addr)
+pde_t* addr_to_pde(void *cr3, uint64_t addr, uint64_t *pe[])
 {
     uint8_t i, levels, bit_len;
     pde_t *pde;
@@ -25,6 +25,10 @@ pde_t* addr_to_pde(void *cr3, uint64_t addr)
 	printf("entry_num = %d\n", entry_num);
 	eaddr = (uint64_t *)((base & EMASK) +
 			     entry_num * sizeof(pde_t));
+	if(pe != NULL) {
+	    if(pe[i] != NULL)
+		*pe[i] = eaddr;
+	}
 	base = *eaddr;
 	printf("base = %16llX\n", base);
     }

@@ -17,6 +17,7 @@
 .equ TABLE_SIZE		, (1 << LOG_TABLE_SIZE)
 .equ PRESENT,             (1)
 .equ RING0,               (0)
+.equ RING3,               (3)	
 .equ INTERRUPT_GATE,      (0xe)	
 .equ EXCEPTION_GATE,      (0xf)	
 .equ SERIAL_PORT,         (0x3f8)
@@ -42,7 +43,8 @@
 	IDT_TABLE     "(\from+1)",\to
 .endif
 .endm
-	
+
+.globl no_err_code, no_err_code_sz	
 .extern STACK_START
 .text
 .globl __reset
@@ -173,8 +175,8 @@ reload_gdt:
 // 5th segment is the tss segment
 .globl flush_tss
 flush_tss:
-	mfence	
-	call reload_gdt
+	//mfence	
+	//call reload_gdt
 	movw $((0x5 << 3) | 0x0), %ax
 	ltr %ax
 	retq
@@ -238,7 +240,7 @@ fill_idt:
 	orq %rdx, (%rbx)
 	addl $1, %eax
 	addq $12, %rbx
-	addq $25, %rcx
+	addq $17, %rcx
 	jmp .loop1
 .halt1:
 	//mov $idt, %esi
@@ -282,11 +284,23 @@ long_mode:
 .globl high_interrupt_handler	
 int_expt_handler_64:
 	cli
+	pushq %rax
+	pushq %rbx
+	movq 16(%rsp), %rbx
+	movq $no_err_code, %rax
+	cmpb $0, (%rax, %rbx)
+	popq %rbx
+	popq %rax
+	je jmp2high_interrupt
+	pushq $0xDEAD
+jmp2high_interrupt:	
 SAVE_CONTEXT
 	leaq 16(%rsp), %rdi
 	callq high_interrupt_handler
 RESTORE_CONTEXT	
 	hlt
+	nop
+	nop
 	// iret must know stack is 64 bit return. amd-vol2-8.9.5
 	iretq	
 
@@ -313,6 +327,15 @@ gdtr64:
 	.word gdt64_end - gdt64 - 1
 	.quad gdt64
 
+// no error code
+no_err_code:	
+	.byte \
+	1, 1, 1, 1, 1, 1, 1, 1,\
+	0, 1, 0, 0, 0, 0, 0, 1,\
+	1, 0, 1, 1, 1, 0, 1, 1
+.fill 232, 1, 1
+no_err_code_sz = . - no_err_code
+
 // maybe this is useless? delete it later	
 scratch_pad:
 .rept 512
@@ -324,8 +347,6 @@ scratch_pad:
 .macro  IDT_TABLE_64 from, to
 	pushq %rax
 	movq $\from, %rax
-	shlq $16, %rax
-	orq $0x2, %rax
 	xchgq %rax, (%rsp)
 	jmp int_expt_handler_64
 .if     \to-\from
@@ -345,6 +366,15 @@ IDT_TABLE_64 202, 255
 	.long (\offset & (0xffffffff << 32))
 	.long 0
 .endm
+
+.macro R3_INT_GATE_64 offset
+	.long (\offset & 0xFFFF) | (CODE_DESC_64 - NULL_DESC_64) << 16
+	.long ((\offset & 0xFFFF0000) << 16) | (PRESENT << 15) | \
+	(RING3 << 13) | (INTERRUPT_GATE << 8) | (IST << 0)
+	.long (\offset & (0xffffffff << 32))
+	.long 0
+.endm
+	
 .macro EXPT_GATE_64 offset
 	.long (\offset & 0xFFFF) | (CODE_DESC_64 - NULL_DESC_64) << 16
 	.long ((\offset & 0xFFFF0000) << 16) | (PRESENT << 15) | \
@@ -359,7 +389,7 @@ idt:
 		EXPT_GATE_64 offset=0
 	.endr
 	.rept 236
-		INT_GATE_64 offset=0
+		R3_INT_GATE_64 offset=0
 	.endr
 	
 idt_end:	
@@ -372,11 +402,11 @@ idt_descriptor :
 .p2align 12 // page align
 .globl boot_p4
 boot_p4:
-        .quad (boot_p3 + PG_PRESENT + PG_WRITABLE)
+        .quad (boot_p3 + PG_PRESENT + PG_WRITABLE + PG_USER)
         .fill 511, 8, 0
 
 boot_p3:
-        .quad (boot_p2 + PG_PRESENT + PG_WRITABLE)
+        .quad (boot_p2 + PG_PRESENT + PG_WRITABLE + PG_USER)
         .fill 511, 8, 0
 
 boot_p2:
