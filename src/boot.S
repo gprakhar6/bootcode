@@ -44,7 +44,7 @@
 .endif
 .endm
 
-.globl no_err_code, no_err_code_sz	
+.globl no_err_code, no_err_code_sz
 .extern STACK_START
 .text
 .globl __reset
@@ -292,18 +292,22 @@ int_expt_handler_64:
 	popq %rbx
 	popq %rax
 	je jmp2high_interrupt
-	pushq $0xDEAD
+	xchgq %rax, -16(%rsp)
+	movq (%rsp), %rax
+	movq $0xDEAD, (%rsp)
+	pushq %rax
+	xchgq %rax, -8(%rsp)
 jmp2high_interrupt:	
 SAVE_CONTEXT
 	leaq 16(%rsp), %rdi
 	callq high_interrupt_handler
-RESTORE_CONTEXT	
-	hlt
+RESTORE_CONTEXT
+	xchgq %rax, 8(%rsp)
+	addq $16, %rsp
 	nop
 	nop
 	// iret must know stack is 64 bit return. amd-vol2-8.9.5
 	iretq	
-
 .section ".data"	
 .p2align 4
 // the global descriptor table
@@ -335,8 +339,8 @@ no_err_code:
 	1, 0, 1, 1, 1, 0, 1, 1
 .fill 232, 1, 1
 no_err_code_sz = . - no_err_code
-
-// maybe this is useless? delete it later	
+	
+// maybe this is useless? delete it later
 scratch_pad:
 .rept 512
 	.byte 0

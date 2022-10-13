@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#define SIZE_ARR_1D(a) (sizeof(a)/sizeof(a[0]))
+
 extern const uint64_t code_start;
 extern const uint64_t code_size;
 extern const uint64_t layout_start;

@@ -33,7 +33,8 @@ int main()
     p2->pde |= U_BIT;
     p3->pde |= U_BIT; // need to update TLB maybe?
     //pde->pde |= U_BIT; // allow user access
-    memcpy(0x200000, &user_test_func, 24);
+    
+    memcpy(0x200000, &user_test_func, 64);
     hexdump(0x200000, 24);
     printf("sof = %d\n", sizeof(user_test_func));
     printf("pde in  main = %llX\n", pde->pde);
