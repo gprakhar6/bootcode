@@ -272,14 +272,28 @@ long_mode:
 
 
 	pushq %rax
+	pushq %rcx
+	pushq %rdx
+	pushq %rsi
 	pushq %rdi
+	pushq %r8
+	pushq %r9
+	pushq %r10
+	pushq %r11
 .endm
 
 .macro RESTORE_CONTEXT
 
-
+	popq %r11
+	popq %r10
+	popq %r9
+	popq %r8
 	popq %rdi
+	popq %rsi
+	popq %rdx
+	popq %rcx
 	popq %rax
+	
 .endm	
 .globl high_interrupt_handler	
 int_expt_handler_64:
@@ -294,15 +308,14 @@ int_expt_handler_64:
 	je jmp2high_interrupt
 	xchgq %rax, -16(%rsp)
 	movq (%rsp), %rax
-	movq $0xDEAD, (%rsp)
+	movq $0xdead, (%rsp)
 	pushq %rax
 	xchgq %rax, -8(%rsp)
-jmp2high_interrupt:	
+jmp2high_interrupt:
 SAVE_CONTEXT
-	leaq 16(%rsp), %rdi
+	leaq 72(%rsp), %rdi
 	callq high_interrupt_handler
 RESTORE_CONTEXT
-	xchgq %rax, 8(%rsp)
 	addq $16, %rsp
 	nop
 	nop

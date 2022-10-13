@@ -19,6 +19,8 @@ uint8_t __attribute__((aligned(16))) user_stack[16*32];
 
 void user_test_func() {
     asm("int $0x80");
+    asm("int $0x80");
+    asm("int $0x80");
     return;
 }
 int main()
