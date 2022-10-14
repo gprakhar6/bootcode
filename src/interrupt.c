@@ -25,6 +25,10 @@ void high_interrupt_handler(void *rdi)
     struct stack_frame_err_t *sf_err;
     //indicator = *(uint64_t *)rdi;
     sf_err = (struct stack_frame_err_t *)rdi;
+//    if(sf_err->int_num == 0x81)
+//	asm("hlt");
+//    else
+//	return;
     //printf("indicator  = %016llX\n", indicator);
     printf("int_num    = %016llX\n", sf_err->int_num);
     printf("error_code = %016llX\n", sf_err->error_code);
@@ -77,6 +81,15 @@ void handler_0x80(struct stack_frame_err_t *sf) {
     return;
 }
 
+void handler_0x81(struct stack_frame_err_t *sf) {
+    printf("Halting in 0x81 Handler\n");
+    asm("hlt");
+    return;
+}
+
+void handler_0x82(struct stack_frame_err_t *sf) {
+    return;
+}
 
 void (*int_func[256])(struct stack_frame_err_t *sf) =
 {
@@ -209,8 +222,8 @@ void (*int_func[256])(struct stack_frame_err_t *sf) =
     [0x7e] = null_func,
     [0x7f] = null_func,
     [0x80] = handler_0x80,
-    [0x81] = null_func,
-    [0x82] = null_func,
+    [0x81] = handler_0x81,
+    [0x82] = handler_0x82,
     [0x83] = null_func,
     [0x84] = null_func,
     [0x85] = null_func,

@@ -18,9 +18,29 @@ struct tss_entry_t __attribute__((aligned(64))) tss_seg;
 uint8_t __attribute__((aligned(16))) user_stack[16*32];
 
 void user_test_func() {
-    asm("int $0x80");
-    asm("int $0x80");
-    asm("int $0x80");
+    volatile uint64_t t1, t2, d, i, n, a, b;
+    n = 100;
+    d = 0;
+    b =0;
+#define utsc(x) asm("rdtscp\n\t" "mov %%rax, %0" : "=r"(x));
+    utsc(t1);    
+    for(i = 0; i < 10; i++) {
+	asm("int $0x80");
+	asm("int $0x80");
+	asm("int $0x80");
+	asm("int $0x80");
+	asm("int $0x80");
+	asm("int $0x80");
+	asm("int $0x80");
+	asm("int $0x80");
+	asm("int $0x80");
+	asm("int $0x80");	
+    }    
+    utsc(t2);
+    d = t2 - t1;
+    asm("mov %0, %%r15"::"r"(d));
+    asm("int $0x81");
+    
     return;
 }
 int main()
@@ -36,12 +56,12 @@ int main()
     p3->pde |= U_BIT; // need to update TLB maybe?
     //pde->pde |= U_BIT; // allow user access
     
-    memcpy(0x200000, &user_test_func, 64);
+    memcpy(0x200000, &user_test_func, 0x1000);
     hexdump(0x200000, 24);
     printf("sof = %d\n", sizeof(user_test_func));
     printf("pde in  main = %llX\n", pde->pde);
     printf("Jumping to user func\n");
-    jump_usermode(0x200000, 0x200000 + 0x1000);
+    jump_usermode(0x200000, 0x200000 + 0x2000);
     //jump_usermode(user_test_func, user_stack + sizeof(user_stack) - 16);
     printf("Not expected to be here");
     return 0;
