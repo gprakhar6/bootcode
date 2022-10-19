@@ -3,6 +3,7 @@
 #include "printf.h"
 #include "util.h"
 #include "globvar.h"
+#include "pic.h"
 
 struct stack_frame_err_t {
     uint64_t int_num;
@@ -76,18 +77,25 @@ void page_fault_handler(struct stack_frame_err_t *sf)
     printf("CR2 = %016llX\n", cr2);
 }
 
-void handler_0x80(struct stack_frame_err_t *sf) {
+void pic_handler(struct stack_frame_err_t *sf)
+{
+    PIC_sendEOI(sf->int_num - PIC_REMAP);
+}
+void handler_0x80(struct stack_frame_err_t *sf)
+{
     printf("0x80 handler\n");
     return;
 }
 
-void handler_0x81(struct stack_frame_err_t *sf) {
+void handler_0x81(struct stack_frame_err_t *sf)
+{
     printf("Halting in 0x81 Handler\n");
     asm("hlt");
     return;
 }
 
-void handler_0x82(struct stack_frame_err_t *sf) {
+void handler_0x82(struct stack_frame_err_t *sf)
+{
     return;
 }
 
@@ -125,7 +133,7 @@ void (*int_func[256])(struct stack_frame_err_t *sf) =
     [0x1d] = null_func,
     [0x1e] = null_func,
     [0x1f] = null_func,
-    [0x20] = null_func,
+    [0x20] = pic_handler,
     [0x21] = null_func,
     [0x22] = null_func,
     [0x23] = null_func,

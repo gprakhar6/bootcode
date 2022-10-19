@@ -144,9 +144,9 @@ jump_usermode:
 	movq $(0x20 | 3), %rax // user data segment
 	pushq %rax
 	pushq %rsi     // stack address
-	//movq $0x2, %rax // RFLAGS, TBD
-	//pushq %rax
-	pushfq
+	movq $0x202, %rax // RFLAGS, (Interrupt Enabled)
+	pushq %rax
+	//pushfq
 	movq $(0x18 | 3), %rax // user code segment
 	pushq %rax
 	pushq %rdi // RIP

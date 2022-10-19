@@ -22,7 +22,7 @@ pde_t* addr_to_pde(void *cr3, uint64_t addr, uint64_t *pe[])
     for(i = 0; i < levels; i++) {
 	entry_num = (addr >> ((levels - 1 - i) * bit_len)) &
 	    entry_mask;
-	printf("entry_num = %d\n", entry_num);
+	//printf("entry_num = %d\n", entry_num);
 	eaddr = (uint64_t *)((base & EMASK) +
 			     entry_num * sizeof(pde_t));
 	if(pe != NULL) {
@@ -30,7 +30,7 @@ pde_t* addr_to_pde(void *cr3, uint64_t addr, uint64_t *pe[])
 		*pe[i] = eaddr;
 	}
 	base = *eaddr;
-	printf("base = %16llX\n", base);
+	//printf("base = %16llX\n", base);
     }
     pde = (pde_t *)eaddr;
     return pde;

@@ -6,6 +6,7 @@
 #include "globvar.h"
 #include "mm_types.h"
 #include "mm.h"
+#include "pic.h"
 
 int user_test_function();
 void init_boot();
@@ -25,21 +26,22 @@ void user_test_func() {
 #define utsc(x) asm("rdtscp\n\t" "mov %%rax, %0" : "=r"(x));
     utsc(t1);    
     for(i = 0; i < 10; i++) {
-	asm("int $0x80");
-	asm("int $0x80");
-	asm("int $0x80");
-	asm("int $0x80");
-	asm("int $0x80");
-	asm("int $0x80");
-	asm("int $0x80");
-	asm("int $0x80");
-	asm("int $0x80");
-	asm("int $0x80");	
+	//asm("int $0x80");
+	//asm("int $0x80");
+	//asm("int $0x80");
+	//asm("int $0x80");
+	//asm("int $0x80");
+	//asm("int $0x80");
+	//asm("int $0x80");
+	//asm("int $0x80");
+	//asm("int $0x80");
+	//asm("int $0x80");	
     }    
     utsc(t2);
     d = t2 - t1;
     asm("mov %0, %%r15"::"r"(d));
-    asm("int $0x81");
+    while(1);
+    //asm("int $0x81");
     
     return;
 }
@@ -48,18 +50,17 @@ int main()
     pde_t *pde;
     pde_t *p1,*p2,*p3;
     pde_t **pe[3] = {&p1, &p2, &p3};
+    volatile uint64_t i;
     printf("Calling init boot\n");
     init_boot();
     pde = addr_to_pde((void *)boot_p4, 0x200000, (uint64_t **)pe);
     p1->pde |= U_BIT;
     p2->pde |= U_BIT;
-    p3->pde |= U_BIT; // need to update TLB maybe?
-    //pde->pde |= U_BIT; // allow user access
-    
+    p3->pde |= U_BIT;
     memcpy(0x200000, &user_test_func, 0x1000);
-    hexdump(0x200000, 24);
-    printf("sof = %d\n", sizeof(user_test_func));
-    printf("pde in  main = %llX\n", pde->pde);
+    PIC_remap(PIC_REMAP, PIC_REMAP + 0x08);
+    for(i = 0; i <= 0xf; i++)
+	IRQ_clear_mask(i);
     printf("Jumping to user func\n");
     jump_usermode(0x200000, 0x200000 + 0x2000);
     //jump_usermode(user_test_func, user_stack + sizeof(user_stack) - 16);
@@ -119,10 +120,10 @@ void fill_user_mode_gdt()
 
     init_CS(ucs);
     ucs->CS.DPL = 3;
-    hexdump(ucs, 8);
+    //hexdump(ucs, 8);
     init_DS(uds);
     uds->DS.DPL = 3;
-    hexdump(uds, 8);
+    //hexdump(uds, 8);
 }
 void init_boot()
 {
@@ -136,7 +137,7 @@ void init_boot()
     flush_tss();
     printf("Filling user mode gdt\n");
     fill_user_mode_gdt();
-    for(i = 0; i <= 6; i++)
-	printf("descriptor[%d] = %016llX\n", i, *(uint64_t *)&gdt_start[i]);    
+//    for(i = 0; i <= 6; i++)
+//	printf("descriptor[%d] = %016llX\n", i, *(uint64_t *)&gdt_start[i]);    
 }
 
