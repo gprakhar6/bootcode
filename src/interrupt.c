@@ -18,6 +18,7 @@ struct stack_frame_err_t {
 extern void (*int_func[256])(struct stack_frame_err_t *sf);
 void null_func(struct stack_frame_err_t *sf);
 void page_fault_handler(struct stack_frame_err_t *sf);
+void pic_handler(struct stack_frame_err_t *sf);
 void handler_0x80(struct stack_frame_err_t *sf);
 
 void high_interrupt_handler(void *rdi)
@@ -134,7 +135,7 @@ void (*int_func[256])(struct stack_frame_err_t *sf) =
     [0x1e] = null_func,
     [0x1f] = null_func,
     [0x20] = pic_handler,
-    [0x21] = null_func,
+    [0x21] = pic_handler,
     [0x22] = null_func,
     [0x23] = null_func,
     [0x24] = null_func,
