@@ -7,6 +7,7 @@
 #include "mm_types.h"
 #include "mm.h"
 #include "pic.h"
+#include "msrs.h"
 
 int user_test_function();
 void init_boot();
@@ -40,6 +41,7 @@ void user_test_func() {
     utsc(t2);
     d = t2 - t1;
     asm("mov %0, %%r15"::"r"(d));
+    asm("syscall");
     while(1);
     //asm("int $0x81");
     
@@ -125,6 +127,28 @@ void fill_user_mode_gdt()
     uds->DS.DPL = 3;
     //hexdump(uds, 8);
 }
+
+void syscall_entry()
+{
+    printf("Entered syscall\n");
+    while(1);
+}
+
+void set_syscall_msrs()
+{
+    uint64_t addr;
+    uint32_t ss_cs, star, addr_h, addr_l;
+    printf("In %s\n", __func__);
+    // 0x10 is ss 0x08 is code segment
+    ss_cs = (0x08);
+    star = ((ss_cs << 16) | ss_cs);
+    set_msr(MSR_STAR, star, 0);
+    addr = (uint64_t)&syscall_entry;
+    addr_h = addr >> 32;
+    addr_l = addr & 0xFFFFFFFF;
+    set_msr(MSR_LSTAR, addr_h, addr_l);
+}
+
 void init_boot()
 {
     int i;
@@ -137,6 +161,8 @@ void init_boot()
     flush_tss();
     printf("Filling user mode gdt\n");
     fill_user_mode_gdt();
+    printf("Setting up syscalls\n");
+    set_syscall_msrs();
 //    for(i = 0; i <= 6; i++)
 //	printf("descriptor[%d] = %016llX\n", i, *(uint64_t *)&gdt_start[i]);    
 }

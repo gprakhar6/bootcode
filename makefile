@@ -46,6 +46,6 @@ $(OBJDIR)/%.o: %.c
 
 clean:
 	rm -rf $(OBJS) $(BINDIR)/main $(DEPENDS)
-	find . -type f -name "*~" | xargs -I {} rm -rf {}
+	find . -type f -name "*~" -or -name "#*"| xargs -I {} rm -rf {}
 
 #	objcopy -O binary --only-section=.text main main.bin
