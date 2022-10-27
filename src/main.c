@@ -130,9 +130,30 @@ void fill_user_mode_gdt()
 
 void syscall_entry()
 {
-    printf("Entered syscall\n");
+    register uint64_t nr;
+    asm("nop" :"=a"(nr));
+    printf("Entered syscall = %ull\n", nr);
     while(1);
 }
+
+/* 
+ * The syscall instruction, puts rip in rcx
+ r11 has the rflags. 
+   
+ * STAR MSR
+ 63-48	| 47-32 | 31-0
+ SS_CS	| SS_CS | 32 bit syscall rip
+ 
+ here, ss is assumed to be 0x08 above the cs. 
+ this seems to be implicity assumption in the code.
+ see https://www.felixcloutier.com/x86/syscall.html,
+ for operation of the syscall
+
+ * LSTAR MSR
+ 63-0
+ SYSCALL target RIP in 64 bit mode
+
+*/
 
 void set_syscall_msrs()
 {
@@ -147,6 +168,7 @@ void set_syscall_msrs()
     addr_h = addr >> 32;
     addr_l = addr & 0xFFFFFFFF;
     set_msr(MSR_LSTAR, addr_h, addr_l);
+    set_msr(MSR_SFMASK, 0, 0);
 }
 
 void init_boot()

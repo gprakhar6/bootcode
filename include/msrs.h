@@ -4,7 +4,7 @@
 #define MSR_STAR   (0xC0000081)
 #define MSR_LSTAR  (0xC0000082)
 #define MSR_CSTAR  (0xC0000083)
-#define SF_MASK    (0xC0000084)
+#define MSR_SFMASK (0xC0000084)
 
 inline void set_msr(uint32_t msr, uint32_t h, uint32_t l)
 {
