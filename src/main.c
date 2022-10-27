@@ -8,12 +8,13 @@
 #include "mm.h"
 #include "pic.h"
 #include "msrs.h"
+#include "sched.h"
 
 int user_test_function();
 void init_boot();
-extern void jump_usermode(void *rip, void *stack);
 extern void flush_tss();
 
+extern char __syscall_entry[];
 extern uint64_t gdt64_start_c[];
 extern uint64_t boot_p4[];
 struct tss_entry_t __attribute__((aligned(64))) tss_seg;
@@ -40,31 +41,39 @@ void user_test_func() {
     }    
     utsc(t2);
     d = t2 - t1;
+    /*
     asm("mov %0, %%r15"::"r"(d));
-    asm("syscall");
+    asm("movl $0xa, %eax\n"
+	"syscall\n");
     while(1);
+    */
     //asm("int $0x81");
     
     return;
 }
+
 int main()
 {
     pde_t *pde;
     pde_t *p1,*p2,*p3;
     pde_t **pe[3] = {&p1, &p2, &p3};
     volatile uint64_t i;
+    void (*fptrs[2])();
     printf("Calling init boot\n");
     init_boot();
     pde = addr_to_pde((void *)boot_p4, 0x200000, (uint64_t **)pe);
     p1->pde |= U_BIT;
     p2->pde |= U_BIT;
     p3->pde |= U_BIT;
-    memcpy(0x200000, &user_test_func, 0x1000);
-    PIC_remap(PIC_REMAP, PIC_REMAP + 0x08);
-    for(i = 0; i <= 0xf; i++)
-	IRQ_clear_mask(i);
+    memcpy(0x200100, &user_test_func, 0x1000);
+//    PIC_remap(PIC_REMAP, PIC_REMAP + 0x08);
+//    for(i = 0; i <= 0xf; i++)
+//	IRQ_clear_mask(i);
+    fptrs[0] = (void (*)())0x200100;
+    fptrs[1] = (void (*)())0x200100;
+    scheduler_init(fptrs, 2);
+    scheduler();
     printf("Jumping to user func\n");
-    jump_usermode(0x200000, 0x200000 + 0x2000);
     //jump_usermode(user_test_func, user_stack + sizeof(user_stack) - 16);
     printf("Not expected to be here");
     return 0;
@@ -132,8 +141,14 @@ void syscall_entry()
 {
     register uint64_t nr;
     asm("nop" :"=a"(nr));
-    printf("Entered syscall = %ull\n", nr);
-    while(1);
+    
+    switch(nr) {
+    case 10:
+	scheduler();
+	break;
+    default:
+	break;
+    }
 }
 
 /* 
@@ -154,7 +169,6 @@ void syscall_entry()
  SYSCALL target RIP in 64 bit mode
 
 */
-
 void set_syscall_msrs()
 {
     uint64_t addr;
@@ -164,7 +178,7 @@ void set_syscall_msrs()
     ss_cs = (0x08);
     star = ((ss_cs << 16) | ss_cs);
     set_msr(MSR_STAR, star, 0);
-    addr = (uint64_t)&syscall_entry;
+    addr = (uint64_t)&__syscall_entry;
     addr_h = addr >> 32;
     addr_l = addr & 0xFFFFFFFF;
     set_msr(MSR_LSTAR, addr_h, addr_l);

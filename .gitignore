@@ -3,6 +3,8 @@
 *.bin
 *.dump
 *.txt
+*#
+.#*
 main
 bkup/*
 obj/*

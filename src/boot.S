@@ -138,6 +138,23 @@ enable_sse:
         popq %rax
         retq
 
+.extern syscall_entry	
+.globl __syscall_entry
+__syscall_entry:	
+	movq    $(STACK_START-16), %rsp
+	movq 	%rsp, %rbp
+	jmp     syscall_entry
+	
+.globl user_trampoline, user_trampoline_sz
+user_trampoline:
+	.quad 0x0000000000000000
+	endbr64
+	movq -0x13(%rip), %rax
+	callq *%rax
+	movq $0xa, %rax
+	syscall
+user_trampoline_end:
+user_trampoline_sz = user_trampoline_end - user_trampoline
 // void jump_usermode(void *rip, void *stack);	
 .globl jump_usermode	
 jump_usermode:
@@ -268,9 +285,8 @@ long_mode:
 	callq   main
 	hlt
 
+// rbx, rbp, r12-r15 are callee saved registers
 .macro SAVE_CONTEXT
-
-
 	pushq %rax
 	pushq %rcx
 	pushq %rdx
@@ -283,7 +299,6 @@ long_mode:
 .endm
 
 .macro RESTORE_CONTEXT
-
 	popq %r11
 	popq %r10
 	popq %r9
