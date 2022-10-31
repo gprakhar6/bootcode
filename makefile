@@ -24,8 +24,14 @@ C_FLAGS := -Wall -ffreestanding -fno-builtin
 .PHONY : all main
 all: depend dirtree main
 depend: $(DEPENDS)
+
+# -MF  write the generated dependency rule to a file
+# -MG  assume missing headers will be generated and don't stop with an error
+# -MM  generate dependency rule for prerequisite, skipping system headers
+# -MP  add phony target for each header to prevent errors when header is missing
+# -MT  add a target to the generated dependency
 $(OBJDIR)/%.d: %.c
-	gcc -Wall -Werror -ffreestanding -fno-builtin -O2 $(INCLUDE_FLAGS) -MM $< -MT $(OBJDIR)/$(<:.c=.o) -MF $@
+	gcc $(C_FLAGS) -Werror -O2 $(INCLUDE_FLAGS) -MM $< -MT $(OBJDIR)/$(<:.c=.o) -MF $@
 include $(DEPENDS)
 
 dirtree:
