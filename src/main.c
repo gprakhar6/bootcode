@@ -61,6 +61,7 @@ int main()
     void (*fptrs[2])();
     printf("Calling init boot\n");
     init_boot();
+#if 0    
     pde = addr_to_pde((void *)boot_p4, 0x200000, (uint64_t **)pe);
     p1->pde |= U_BIT;
     p2->pde |= U_BIT;
@@ -71,6 +72,9 @@ int main()
 //	IRQ_clear_mask(i);
     fptrs[0] = (void (*)())0x200100;
     fptrs[1] = (void (*)())0x200100;
+#endif
+    outb(PORT_WAIT_USER_CODE_MAPPING, 1);
+    outb(PORT_HLT, 0);
     scheduler_init(fptrs, 2);
     scheduler();
     printf("Jumping to user func\n");
