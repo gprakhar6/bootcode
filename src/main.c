@@ -17,6 +17,7 @@ extern void flush_tss();
 extern char __syscall_entry[];
 extern uint64_t gdt64_start_c[];
 extern uint64_t boot_p4[];
+extern uint64_t kern_stack[];
 struct tss_entry_t __attribute__((aligned(64))) tss_seg;
 uint8_t __attribute__((aligned(16))) user_stack[16*32];
 
@@ -59,7 +60,9 @@ int main()
     pde_t **pe[3] = {&p1, &p2, &p3};
     volatile uint64_t i;
     void (*fptrs[2])();
+    asm("hlt");
     printf("Calling init boot\n");
+    return;
     init_boot();
 #if 0    
     pde = addr_to_pde((void *)boot_p4, 0x200000, (uint64_t **)pe);
@@ -74,7 +77,8 @@ int main()
     fptrs[1] = (void (*)())0x200100;
 #endif
     outb(PORT_WAIT_USER_CODE_MAPPING, 1);
-    outb(PORT_HLT, 0);
+    //outb(PORT_HLT, 0);
+    while(1);
     scheduler_init(fptrs, 2);
     scheduler();
     printf("Jumping to user func\n");
@@ -89,7 +93,8 @@ void fill_tss(struct tss_entry_t *tss, struct sys_desc_t *tss_desc)
 
     // fill tss table
     memset(tss, 0, sizeof(*tss));
-    tss->rsp0 = stack_start - 16; // keep some 16 bytes free
+    // need to see its correctness
+    tss->rsp0 = kern_stack - 16; // keep some 16 bytes free
     tss->iomap_base = sizeof(*tss); // no iomap
 
     // fill tss desc

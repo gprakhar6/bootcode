@@ -51,7 +51,7 @@
 .code16
 __reset:
 	cli
-	movl $(STACK_START-16), %esp       // why -16 will think later
+	//movl $(STACK_START-16), %esp       // why -16 will think later
 	movl %esp, %ebp
 	//call check_cpuid
 	movl $0b10100000, %eax             // Set the PAE and PGE bit.
@@ -140,8 +140,9 @@ enable_sse:
 
 .extern syscall_entry	
 .globl __syscall_entry
-__syscall_entry:	
-	movq    $(STACK_START-16), %rsp
+__syscall_entry:
+	movq    $kern_stack, %rbp // store power on value
+	movq    (%rbp), %rsp
 	movq 	%rsp, %rbp
 	jmp     syscall_entry
 	
@@ -269,14 +270,24 @@ fill_idt:
 	
 long_mode:
         // Set up the stack pointer and call into C.
-	movq    $(STACK_START-16), %rsp
+	movq    $kern_stack, %rbx // store power on value
+	movq    %rsp, (%rbx)
+	//movq    $(STACK_START-16), %rsp
 	movq 	%rsp, %rbp
         movq    $(DATA_DESC_64 - NULL_DESC_64), %rax    // Our data segment selector
         movq    %rax, %ds      // -> DS: Data Segment
         movq    %rax, %es      // -> ES: Extra Segment
         movq    %rax, %ss      // -> SS: Stack Segment
 	call 	enable_sse
+fill_idt_lock_grab:
+	.quad	0x1
+	xor     %rax, %rax
+	movq    $fill_idt_lock_grab, %rbx
+	xchgq   %rax, (%rbx)
+	test    %rax, %rax
+	jz      skip_filling_idt
 	call    fill_idt
+skip_filling_idt:
 	//movq 	$idt, %rsi
 	//movq 	$0x40, %rdi
 	//call 	hex_dump_64
@@ -429,6 +440,9 @@ idt_descriptor :
     .word idt_end - idt - 1 // Size of our idt, always one less than the actual size
     .quad idt // Start address of our idt	
 
+.globl kern_stack	
+kern_stack:
+	.quad 	0x0
 // paging structures
 .section .paging, "aw", @progbits
 .p2align 12 // page align
