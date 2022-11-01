@@ -60,7 +60,8 @@ int main()
     pde_t **pe[3] = {&p1, &p2, &p3};
     volatile uint64_t i;
     void (*fptrs[2])();
-    asm("hlt");
+    return;
+    //mutex_init(&mutex_printf);
     printf("Calling init boot\n");
     return;
     init_boot();

@@ -4,6 +4,34 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#include "hw_types.h"
+
+volatile static inline void mutex_init(mutex_t *m)
+{
+    asm volatile("movq $1, (%%rax)" :: "a"(m));
+}
+
+volatile static inline void mutex_unlock(mutex_t *m)
+{
+    uint64_t rax = 1;
+    asm volatile("xchgq %0, (%1)\n":"+a"(rax):"r"(m));
+}
+
+volatile static inline void mutex_lock_busy_wait(mutex_t *m)
+{
+    uint64_t rax = 0;
+    while(rax == 0)
+	asm volatile("xchgq %0, (%1)\n":"+a"(rax):"r"(m));
+}
+
+// successful returns 1 else 0
+volatile static inline uint64_t mutex_lock(mutex_t *m)
+{
+    uint64_t rax = 0;
+    asm volatile("xchgq %0, (%1)\n":"+a"(rax):"r"(m));
+    return rax;
+}
+
 static inline void outb(uint16_t port, uint8_t val)
 {
     asm volatile ( "outb %0, %1" : : "a"(val), "Nd"(port) );

@@ -270,6 +270,7 @@ fill_idt:
 	
 long_mode:
         // Set up the stack pointer and call into C.
+	subq    $16, %rsp
 	movq    $kern_stack, %rbx // store power on value
 	movq    %rsp, (%rbx)
 	//movq    $(STACK_START-16), %rsp

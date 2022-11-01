@@ -76,4 +76,6 @@ struct __attribute__((packed)) sys_desc_t {
     uint16_t hardcode1_0	: 5;
     uint32_t reserved2		: 19;
 };
+
+typedef uint64_t mutex_t;
 #endif

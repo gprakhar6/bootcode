@@ -34,6 +34,8 @@
 #include <stdint.h>
 
 #include "printf.h"
+#include "util.h"
+#include "globvar.h"
 
 #define PRINTF_DISABLE_SUPPORT_FLOAT
 #define PRINTF_DISABLE_SUPPORT_EXPONENTIAL
@@ -865,11 +867,13 @@ static int _vsnprintf(out_fct_type out, char* buffer, const size_t maxlen, const
 int printf_(const char* format, ...)
 {
   va_list va;
-  
+
+  mutex_lock_busy_wait(&mutex_printf);
   va_start(va, format);
   char buffer[1];
   const int ret = _vsnprintf(_out_char, buffer, (size_t)-1, format, va);
   va_end(va);
+  mutex_unlock(&mutex_printf);
   return ret;
 }
 

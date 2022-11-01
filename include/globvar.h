@@ -2,6 +2,7 @@
 #define __CUSTOM_GLOBAL_H__
 
 #include <stdint.h>
+#include "hw_types.h"
 
 #define SIZE_ARR_1D(a) (sizeof(a)/sizeof(a[0]))
 // serial_port (0x3f9) in boot.S
@@ -24,6 +25,6 @@ extern const uint64_t bss_size;
 extern const uint64_t stack_start;
 extern const uint64_t stack_size;
 
-
+extern mutex_t mutex_printf;
 //extern uint64_t t1, t2;
 #endif
