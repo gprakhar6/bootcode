@@ -21,6 +21,7 @@
 .equ INTERRUPT_GATE,      (0xe)	
 .equ EXCEPTION_GATE,      (0xf)	
 .equ SERIAL_PORT,         (0x3f8)
+.equ PORT_MY_ID,          (0x3fc)	
 .equ IST,         	  (0x0) // interrupt stack table
 	
 .macro INT_GATE_32 offset
@@ -51,8 +52,8 @@
 .code16
 __reset:
 	cli
-	//movl $(STACK_START-16), %esp       // why -16 will think later
-	movl %esp, %ebp
+	//movl $(0x18000), %esp       // why -16 will think later
+	//movl %esp, %ebp
 	//call check_cpuid
 	movl $0b10100000, %eax             // Set the PAE and PGE bit.
 	movl %eax, %cr4
@@ -138,12 +139,21 @@ enable_sse:
         popq %rax
         retq
 
+// stack based arguments are not supported right now TBD	
 .extern syscall_entry	
 .globl __syscall_entry
 __syscall_entry:
-	movq    $kern_stack, %rbp // store power on value
-	movq    (%rbp), %rsp
-	movq 	%rsp, %rbp
+	movq    %rax, %rbp
+	movq    %rdx, %rsp
+	movw    $PORT_MY_ID, %dx
+	xorq    %rax, %rax
+	inb     %dx, %al	
+	movq    $kern_stack, %rdx // store power on value, in its own id
+	leaq    (%rdx, %rax, 8), %rax
+	movq    (%rax), %rdx
+	xchgq   %rdx, %rsp
+	movq    %rbp, %rax
+	movq    %rsp, %rbp
 	jmp     syscall_entry
 	
 .globl user_trampoline, user_trampoline_sz
@@ -195,7 +205,8 @@ reload_gdt:
 flush_tss:
 	//mfence	
 	//call reload_gdt
-	movw $((0x5 << 3) | 0x0), %ax
+	shlq $3, %rdi
+	movq %rdi, %rax
 	ltr %ax
 	retq
 // we use just rax, rdx we will discard	
@@ -271,7 +282,11 @@ fill_idt:
 long_mode:
         // Set up the stack pointer and call into C.
 	subq    $16, %rsp
-	movq    $kern_stack, %rbx // store power on value
+	movw    $PORT_MY_ID, %dx
+	xor     %rax, %rax
+	inb     %dx, %al
+	movq    $kern_stack, %rbx // store power on value, in its own id
+	leaq    (%rbx, %rax, 8), %rbx
 	movq    %rsp, (%rbx)
 	//movq    $(STACK_START-16), %rsp
 	movq 	%rsp, %rbp
@@ -288,7 +303,13 @@ fill_idt_lock_grab:
 	test    %rax, %rax
 	jz      skip_filling_idt
 	call    fill_idt
-skip_filling_idt:
+// dont progress ahead until IDT's have been filled	
+skip_filling_idt:	
+	movq    $fill_idt_lock_grab, %rbx
+	movq    $1, (%rbx)	
+wait_for_fill_idt:
+	cmp $1, (%rbx)
+	jne wait_for_fill_idt
 	//movq 	$idt, %rsi
 	//movq 	$0x40, %rdi
 	//call 	hex_dump_64
@@ -362,9 +383,8 @@ DATA_DESC_64:
 	.quad 0x00CF92000000FFFF
 	.quad 0x0000000000000000 // user code seg
 	.quad 0x0000000000000000 // user data seg
-	.quad 0x0000000000000000 // tss seg .quad 0x0000890050000067
-	.quad 0x0000000000000000
-//.fill 16, 8, 0	
+	.fill 256, 8, 0	// tss seg .quad 0x0000890050000067, one for each vcpu
+	
 gdt64_end:
 .p2align 4
 gdtr64:
@@ -443,7 +463,8 @@ idt_descriptor :
 
 .globl kern_stack	
 kern_stack:
-	.quad 	0x0
+	.fill  512, 8, 0
+	
 // paging structures
 .section .paging, "aw", @progbits
 .p2align 12 // page align

@@ -23,15 +23,19 @@ void handler_0x80(struct stack_frame_err_t *sf);
 
 void high_interrupt_handler(void *rdi)
 {
+    uint8_t my_id;
     //uint64_t indicator;
     struct stack_frame_err_t *sf_err;
     //indicator = *(uint64_t *)rdi;
     sf_err = (struct stack_frame_err_t *)rdi;
+
+    my_id = inb(PORT_MY_ID);
 //    if(sf_err->int_num == 0x81)
 //	asm("hlt");
 //    else
 //	return;
     //printf("indicator  = %016llX\n", indicator);
+    printf("id         = %d\n", (int)my_id);
     printf("int_num    = %016llX\n", sf_err->int_num);
     printf("error_code = %016llX\n", sf_err->error_code);
     printf("rip        = %016llX\n", sf_err->rip);

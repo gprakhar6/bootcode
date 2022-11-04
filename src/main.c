@@ -12,13 +12,13 @@
 
 int user_test_function();
 void init_boot();
-extern void flush_tss();
+extern void flush_tss(uint8_t id);
 
 extern char __syscall_entry[];
 extern uint64_t gdt64_start_c[];
 extern uint64_t boot_p4[];
 extern uint64_t kern_stack[];
-struct tss_entry_t __attribute__((aligned(64))) tss_seg;
+struct tss_entry_t __attribute__((aligned(64))) tss_seg[MAX_CPUS];
 uint8_t __attribute__((aligned(16))) user_stack[16*32];
 
 void user_test_func() {
@@ -60,10 +60,8 @@ int main()
     pde_t **pe[3] = {&p1, &p2, &p3};
     volatile uint64_t i;
     void (*fptrs[2])();
-    return;
     //mutex_init(&mutex_printf);
     printf("Calling init boot\n");
-    return;
     init_boot();
 #if 0    
     pde = addr_to_pde((void *)boot_p4, 0x200000, (uint64_t **)pe);
@@ -88,14 +86,18 @@ int main()
     return 0;
 }
 
-void fill_tss(struct tss_entry_t *tss, struct sys_desc_t *tss_desc)
+void fill_tss(struct tss_entry_t *tss, struct sys_desc_t *tss_desc,
+	      uint64_t stack_addr)
 {
     int sz;
 
     // fill tss table
     memset(tss, 0, sizeof(*tss));
     // need to see its correctness
-    tss->rsp0 = kern_stack - 16; // keep some 16 bytes free
+    
+    tss->rsp0 = stack_addr;
+    printf("my id = %d\n", (int)inb(PORT_MY_ID));
+    
     tss->iomap_base = sizeof(*tss); // no iomap
 
     // fill tss desc
@@ -198,13 +200,28 @@ void set_syscall_msrs()
 void init_boot()
 {
     int i;
+    uint8_t my_id;
+    uint64_t stack_addr;
+    mutex_t mut;
     gdt_entry_t *gdt_start = (gdt_entry_t *)gdt64_start_c;
+    mutex_init(&mut);
+    my_id = inb(PORT_MY_ID);
+    printf("my id = %d\n", my_id);
     // zero out the bss section
     memset((void *)bss_start, 0, bss_size);
     printf("Filling TSS\n");
-    fill_tss(&tss_seg, (struct sys_desc_t *)&gdt_start[5]);
+    // my_id+5 because first 4 entries are occupied in gdt
+    stack_addr = *(uint64_t *)(kern_stack + my_id); // keep some 16 bytes free
+    printf("stack_addr[%d] = %llX\n", my_id, stack_addr);
+    fill_tss(&tss_seg[my_id], (struct sys_desc_t *)&gdt_start[my_id+5],
+	stack_addr);
+
+    //mutex_lock_busy_wait(&mut);
+    //hexdump(&gdt_start[my_id+5], 16);
+    //while(1);
+    //mutex_unlock(&mut);
     printf("Flushing TSS\n");
-    flush_tss();
+    flush_tss(my_id+5);
     printf("Filling user mode gdt\n");
     fill_user_mode_gdt();
     printf("Setting up syscalls\n");

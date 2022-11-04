@@ -27,5 +27,6 @@ void hexdump(void *ptr, int len)
 	if(len % 8 == 0)
 	    printf("\n");
     }
+    printf("\n");
 }
 

@@ -31,22 +31,28 @@ SECTIONS
   BSS_START = .;
   .bss ALIGN(PAGE_SIZE): { *(.bss)}
   BSS_SIZE = . - BSS_START;
-  
-  PAGE_DS_START = .;
-  .paging ALIGN(PAGE_SIZE): { obj/src/boot.o(paging) }
-  PAGE_DS_SIZE = . - PAGE_DS_START;
-  
+
+  /*
+  this has gdt, gdt must be in within address space of few kbs(not)
+   sure how much. but .paging takes space, keep it after data segment
+  */
   DATA_START = .;
   .data ALIGN(PAGE_SIZE) : { *(.data) }
   . = ALIGN(8); /* for some reason align it to 8 bytes */
   DATA_SIZE = . - DATA_START;
+  
   .interrupt_table : {obj/src/boot.o(.interrupt_table)}
   .interrupt_descriptors : {obj/src/boot.o(.interrupt_descriptors)}  
   /* end data section  */
 
-
-  . = ALIGN(PAGE_SIZE);
-  . += STACK_SIZE;
+  PAGE_DS_START = .;
+  .paging ALIGN(PAGE_SIZE): { obj/src/boot.o(paging) }
+  PAGE_DS_SIZE = . - PAGE_DS_START;
+  
+  .stack ALIGN(PAGE_SIZE): {
+    . += STACK_SIZE;
+  }
+  
   STACK_START = .;
   /DISCARD/ : { *(.eh_frame .comment) }
 }
