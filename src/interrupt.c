@@ -29,7 +29,7 @@ void high_interrupt_handler(void *rdi)
     //indicator = *(uint64_t *)rdi;
     sf_err = (struct stack_frame_err_t *)rdi;
 
-    my_id = inb(PORT_MY_ID);
+    my_id = get_id();
 //    if(sf_err->int_num == 0x81)
 //	asm("hlt");
 //    else

@@ -19,6 +19,11 @@ void *memcpy (void *dest, void *src, register size_t len)
     return dest;
 }
 
+void barrier()
+{
+    
+}
+
 void hexdump(void *ptr, int len)
 {
     register unsigned char *cptr = (unsigned char*)ptr;

@@ -96,7 +96,6 @@ void fill_tss(struct tss_entry_t *tss, struct sys_desc_t *tss_desc,
     // need to see its correctness
     
     tss->rsp0 = stack_addr;
-    printf("my id = %d\n", (int)inb(PORT_MY_ID));
     
     tss->iomap_base = sizeof(*tss); // no iomap
 
@@ -197,31 +196,39 @@ void set_syscall_msrs()
     set_msr(MSR_SFMASK, 0, 0);
 }
 
+static mutex_t mutex_bss_load = 1;
+static mutex_t mutex_tss_fill_flush = 1;
 void init_boot()
 {
     int i;
     uint8_t my_id;
     uint64_t stack_addr;
-    mutex_t mut;
     gdt_entry_t *gdt_start = (gdt_entry_t *)gdt64_start_c;
-    mutex_init(&mut);
-    my_id = inb(PORT_MY_ID);
+    //my_id = inb(PORT_MY_ID);
+    my_id = get_id();
     printf("my id = %d\n", my_id);
     // zero out the bss section
+    mutex_lock_busy_wait(&mutex_bss_load);
+    //mutex_lock_pause(&mutex_bss_load);
     memset((void *)bss_start, 0, bss_size);
+    mutex_unlock(&mutex_bss_load);
     printf("Filling TSS\n");
     // my_id+5 because first 4 entries are occupied in gdt
     stack_addr = *(uint64_t *)(kern_stack + my_id); // keep some 16 bytes free
     printf("stack_addr[%d] = %llX\n", my_id, stack_addr);
+
+
+    // perhaps the tss filling and flushing
+    // must happen as atomic
+    // if one processor modified tss, while other
+    // does ltr, perhaps that is the issue
+    mutex_lock_pause(&mutex_tss_fill_flush);
     fill_tss(&tss_seg[my_id], (struct sys_desc_t *)&gdt_start[my_id+5],
 	stack_addr);
-
-    //mutex_lock_busy_wait(&mut);
-    //hexdump(&gdt_start[my_id+5], 16);
-    //while(1);
-    //mutex_unlock(&mut);
+    
     printf("Flushing TSS\n");
     flush_tss(my_id+5);
+    mutex_unlock(&mutex_tss_fill_flush);
     printf("Filling user mode gdt\n");
     fill_user_mode_gdt();
     printf("Setting up syscalls\n");

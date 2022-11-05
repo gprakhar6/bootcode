@@ -6,6 +6,17 @@
 
 #include "hw_types.h"
 
+volatile static inline uint8_t get_id()
+{
+    uint64_t rax;
+    asm("movq %%rsp, %0\n"
+	"shrq $12, %0\n"
+	"addq $1, %0\n"
+	"shlq $12, %0\n"
+	"movq (%0), %0" : "=r"(rax));
+    return (uint8_t)rax;
+}
+
 volatile static inline void mutex_init(mutex_t *m)
 {
     asm volatile("movq $1, (%%rax)" :: "a"(m));
@@ -15,6 +26,17 @@ volatile static inline void mutex_unlock(mutex_t *m)
 {
     uint64_t rax = 1;
     asm volatile("xchgq %0, (%1)\n":"+a"(rax):"r"(m));
+}
+
+volatile static inline void mutex_lock_pause(mutex_t *m)
+{
+    uint64_t rax = 0;
+loop:
+    asm volatile("xchgq %0, (%1)\n":"+a"(rax):"r"(m));
+    if(rax == 0) {
+	asm volatile("pause");
+	goto loop;
+    }
 }
 
 volatile static inline void mutex_lock_busy_wait(mutex_t *m)

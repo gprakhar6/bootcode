@@ -278,7 +278,14 @@ fill_idt:
 	movq %rbp, %rsp
 	popq %rbp
 	ret
-	
+
+/*
+  Stack design for each vcpu kernel
+    |           |
+    |           | <-- stack_start - 16, actual starting
+    | EMPTY     |
+    | PROC_ID   | <--- stack start	
+*/
 long_mode:
         // Set up the stack pointer and call into C.
 	subq    $16, %rsp
@@ -288,7 +295,11 @@ long_mode:
 	movq    $kern_stack, %rbx // store power on value, in its own id
 	leaq    (%rbx, %rax, 8), %rbx
 	movq    %rsp, (%rbx)
-	//movq    $(STACK_START-16), %rsp
+	movq    %rsp, %rbp
+	shrq    $12, %rbp  // page aligned address
+	addq    $1, %rbp
+	shlq    $12, %rbp
+	movq    %rax, (%rbp)
 	movq 	%rsp, %rbp
         movq    $(DATA_DESC_64 - NULL_DESC_64), %rax    // Our data segment selector
         movq    %rax, %ds      // -> DS: Data Segment
@@ -301,18 +312,21 @@ fill_idt_lock_grab:
 	movq    $fill_idt_lock_grab, %rbx
 	xchgq   %rax, (%rbx)
 	test    %rax, %rax
-	jz      skip_filling_idt
+	jz      wait_for_fill_idt
 	call    fill_idt
 // dont progress ahead until IDT's have been filled	
-skip_filling_idt:	
 	movq    $fill_idt_lock_grab, %rbx
-	movq    $1, (%rbx)	
+	movq    $1, (%rbx)
+	jmp     skip_wait_for_fill_idt
 wait_for_fill_idt:
+	movq    $fill_idt_lock_grab, %rbx
 	cmp $1, (%rbx)
+	pause   // TBD idea is not to wait in busy loop
 	jne wait_for_fill_idt
 	//movq 	$idt, %rsi
 	//movq 	$0x40, %rdi
 	//call 	hex_dump_64
+skip_wait_for_fill_idt:	
         movq    $idt_descriptor, %rax
         lidtq   (%rax)
 	callq   main
