@@ -58,7 +58,8 @@ int main()
     pde_t *pde;
     pde_t *p1,*p2,*p3;
     pde_t **pe[3] = {&p1, &p2, &p3};
-    volatile uint64_t i;
+    volatile uint64_t i, j;
+    uint8_t my_id;
     void (*fptrs[2])();
     //mutex_init(&mutex_printf);
     printf("Calling init boot\n");
@@ -75,9 +76,12 @@ int main()
     fptrs[0] = (void (*)())0x200100;
     fptrs[1] = (void (*)())0x200100;
 #endif
-    outb(PORT_WAIT_USER_CODE_MAPPING, 1);
+    //outb(PORT_WAIT_USER_CODE_MAPPING, 1);
     //outb(PORT_HLT, 0);
-    while(1);
+    for(i=((uint64_t)0x1 << 30); i>0; i--);
+    my_id = get_id();
+    outb(PORT_MY_ID, my_id);
+    asm("hlt");
     scheduler_init(fptrs, 2);
     scheduler();
     printf("Jumping to user func\n");
@@ -227,7 +231,7 @@ void init_boot()
 	stack_addr);
     
     printf("Flushing TSS\n");
-    flush_tss(my_id+5);
+    flush_tss(my_id);
     mutex_unlock(&mutex_tss_fill_flush);
     printf("Filling user mode gdt\n");
     fill_user_mode_gdt();

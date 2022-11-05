@@ -205,6 +205,7 @@ reload_gdt:
 flush_tss:
 	//mfence	
 	//call reload_gdt
+	addq $5, %rdi
 	shlq $3, %rdi
 	movq %rdi, %rax
 	ltr %ax
@@ -397,7 +398,7 @@ DATA_DESC_64:
 	.quad 0x00CF92000000FFFF
 	.quad 0x0000000000000000 // user code seg
 	.quad 0x0000000000000000 // user data seg
-	.fill 256, 8, 0	// tss seg .quad 0x0000890050000067, one for each vcpu
+	.fill 256, 16, 0	 // tss seg it is 16 bytes
 	
 gdt64_end:
 .p2align 4
