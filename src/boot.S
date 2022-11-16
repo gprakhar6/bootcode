@@ -10,6 +10,7 @@
 .equ PG_WRITABLE	, 0x2
 .equ PG_USER		, 0x4
 .equ PG_BIG		, 0x80
+.equ PG_PCD             , 0x10 // page cache disable
 .equ PG_NO_EXEC		, 0x8000000000000000
 .equ LOG_TABLE_SIZE	, 9
 .equ LOG_PAGE_SIZE	, 12
@@ -21,7 +22,9 @@
 .equ INTERRUPT_GATE,      (0xe)	
 .equ EXCEPTION_GATE,      (0xf)	
 .equ SERIAL_PORT,         (0x3f8)
-.equ PORT_MY_ID,          (0x3fc)	
+.equ PORT_HLT,            (0x3fa)	
+.equ PORT_MY_ID,          (0x3fc)
+	
 .equ IST,         	  (0x0) // interrupt stack table
 	
 .macro INT_GATE_32 offset
@@ -51,7 +54,7 @@
 .globl __reset
 .code16
 __reset:
-	cli
+	cli	
 	//movl $(0x18000), %esp       // why -16 will think later
 	//movl %esp, %ebp
 	//call check_cpuid
@@ -288,11 +291,64 @@ fill_idt:
     | PROC_ID   | <--- stack start	
 */
 long_mode:
-        // Set up the stack pointer and call into C.
+	movl    $(0x0000001B), %ecx
+	rdmsr
+	shrl $12, %eax
+	shll $12, %eax
+	movl %eax, %ebx
+	addl $0x0030, %ebx
+	//movl    $(0xFEC00000+0x30), %ebx
+	movl    (%ebx), %ecx
+	movw $PORT_HLT, %dx
+	out  %al, (%dx)
+	// send init ipi
+	movl    $(0xFEC00000+0x280), %ebx
+	movl    $0, (%ebx)
+	movl    $(0xFEC00000+0x310), %ebx
+	movl    $0x01, %eax
+	shll    $24, %eax
+	movl    %eax, (%ebx)
+	subl    $0x10, %ebx
+	movl    $0xC500, (%ebx)
+	pause
+	
+	movl    $(0xFEC00000+0x280), %ebx
+	movl    $0, (%ebx)	
+	movl    $(0xFEC00000+0x310), %ebx
+	movl    $0x01, %eax
+	shll    $24, %eax
+	movl    %eax, (%ebx)
+	subl    $0x10, %ebx
+	movl    $0x8500, (%ebx)
+	pause
+	
+	movl    $(0xFEC00000+0x280), %ebx
+	movl    $0, (%ebx)	
+	// send startup ipi to 2nd page
+	movl    $(0xFEC00000+0x310), %ebx
+	movl    $0x01, %eax
+	shll    $24, %eax
+	movl    %eax, (%ebx)
+	subl    $0x10, %ebx
+	movl    $0x0602, (%ebx)	 // 2nd page
+	pause
+
+	movl    $(0xFEC00000+0x280), %ebx
+	movl    $0, (%ebx)	
+	// send startup ipi to 2nd page
+	movl    $(0xFEC00000+0x310), %ebx
+	movl    $0x01, %eax
+	shll    $24, %eax
+	movl    %eax, (%ebx)
+	subl    $0x10, %ebx
+	movl    $0x0602, (%ebx)	 // 2nd page
+	pause
+	
+	// Set up the stack pointer and call into C.
 	subq    $16, %rsp
 	movw    $PORT_MY_ID, %dx
 	xor     %rax, %rax
-	inb     %dx, %al
+	inw     %dx, %ax
 	movq    $kern_stack, %rbx // store power on value, in its own id
 	leaq    (%rbx, %rax, 8), %rbx
 	movq    %rsp, (%rbx)
@@ -490,7 +546,10 @@ boot_p4:
 
 boot_p3:
         .quad (boot_p2 + PG_PRESENT + PG_WRITABLE + PG_USER)
-        .fill 511, 8, 0
+	.quad 0 // 1 gb
+	.quad 0 // 2
+	.quad (apic_page + PG_PRESENT + PG_WRITABLE + PG_USER) // 3 gb
+        .fill 508, 8, 0
 
 boot_p2:
 .set pg, 0
@@ -498,3 +557,8 @@ boot_p2:
     .quad (pg + PG_PRESENT + PG_WRITABLE + PG_BIG)
     .set pg, pg+(PAGE_SIZE * 512)
   .endr	
+
+apic_page:
+	.fill 503, 8, 0
+	.quad (0xFEE00000 + PG_PRESENT + PG_WRITABLE + PG_BIG + PG_PCD)
+	.fill 8, 8, 0

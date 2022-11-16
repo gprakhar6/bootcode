@@ -21,6 +21,11 @@ extern uint64_t kern_stack[];
 struct tss_entry_t __attribute__((aligned(64))) tss_seg[MAX_CPUS];
 uint8_t __attribute__((aligned(16))) user_stack[16*32];
 
+void kern_test()
+{
+    uint8_t *apic_base = 0xFEC00000;
+    printf("apicid: %08X\n", *(uint32_t *)(apic_base + 0x20));
+}
 void user_test_func() {
     volatile uint64_t t1, t2, d, i, n, a, b;
     n = 100;
@@ -64,6 +69,7 @@ int main()
     //mutex_init(&mutex_printf);
     printf("Calling init boot\n");
     init_boot();
+    while(1);
 #if 0    
     pde = addr_to_pde((void *)boot_p4, 0x200000, (uint64_t **)pe);
     p1->pde |= U_BIT;
@@ -81,7 +87,7 @@ int main()
     for(i=((uint64_t)0x1 << 30); i>0; i--);
     my_id = get_id();
     outb(PORT_MY_ID, my_id);
-    asm("hlt");
+    outb(PORT_HLT, 0);
     scheduler_init(fptrs, 2);
     scheduler();
     printf("Jumping to user func\n");
