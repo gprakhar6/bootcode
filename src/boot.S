@@ -26,6 +26,16 @@
 .equ PORT_MY_ID,          (0x3fc)
 	
 .equ IST,         	  (0x0) // interrupt stack table
+
+
+.equ APIC_ID_REG,          (0x20)
+.equ APIC_SPUR_INT_REG,    (0xF0)
+.equ APIC_ESR_REG,         (0x280)
+.equ APIC_ICR_LREG,        (0x300)
+.equ APIC_ICR_HREG,        (0x310)
+//.equ APIC_ID_REG          (0x20)
+//.equ APIC_ID_REG          (0x20)
+
 	
 .macro INT_GATE_32 offset
 	.long (\offset & 0xFFFF) | (CODE_DESC - NULL_DESC) << 16
@@ -54,7 +64,7 @@
 .globl __reset
 .code16
 __reset:
-	cli	
+	cli
 	//movl $(0x18000), %esp       // why -16 will think later
 	//movl %esp, %ebp
 	//call check_cpuid
@@ -283,74 +293,111 @@ fill_idt:
 	popq %rbp
 	ret
 
+.macro OUTB port, value
+	movb $\value, %al
+	movw $\port, %dx
+	out  %al, (%dx)			
+.endm	
+disable_pic:
+	OUTB 0x20, 0x11
+	OUTB 0xa0, 0x11
+	OUTB 0x21, 0xe0
+	OUTB 0xa1, 0xe8
+        OUTB 0x21, 4
+        OUTB 0xa1, 2
+       /* Set ICW4 */
+        OUTB 0x21, 1
+        OUTB 0xa1, 1
+        /* Set OCW1 (interrupt masks) */
+        OUTB 0x21, 0xff
+        OUTB 0xa1, 0xff
+	retq
+
+/*
+    APIC Base   :  0xFEE0_0000 (MSR 0x0000_001B)
+    0x20	: APIC ID
+    0x80	: task priority register
+    0xA0	: processor priority register
+    0xB0	: EOI (we must write zero here)
+    0xC0	: Remote read register
+    0xD0	: Logical destination register
+    0xE0	: destination format register
+    0xF0	: spurious interrupt vector
+    100-170h	: In-Service Register (ISR)
+    180-1F0h	: Trigger Mode Register (TMR)
+    200-270h	: Interrupt Request Register (IRR)
+    280h	: Error Status Register (ESR)
+    300h	: Interrupt Command Register Low (bits 31:0)
+    310h	: Interrupt Command Register High (bits 63:32)
+    320h	: Timer Local Vector Table Entry
+    330h	: Thermal Local Vector Table Entry
+    340h	: Performance Counter Local Vector Table Entry
+    350h	: Local Interrupt 0 Vector Table Entry
+    360h	: Local Interrupt 1 Vector Table Entry
+    370h	: Error Vector Table Entry
+    380h	: Timer Initial Count Register
+    390h	: Timer Current Count Register
+    3E0h	: Timer Divide Configuration Register
+    400h	: Extended APIC Feature Register
+    410h	: Extended APIC Control Register
+    420h	: Specific End of Interrupt Register (SEOI)
+    480-4F0h	: Interrupt Enable Registers (IER)
+    500-530h	: Extended Interrupt [3:0] Local Vector Table Registers	
+*/	
+// assume ebx has base address
+.macro OR_APIC_REG OFFSET, VALUE, BIT_POS
+	movl    %ebx, %eax
+	addl    $\OFFSET, %eax
+	movl    $\VALUE, %ecx
+	shll    $\BIT_POS, %ecx
+	orl     %ecx, (%eax)
+.endm
+
+.macro WRITE_APIC_REG OFFSET, VALUE
+	movl    %ebx, %eax
+	addl    $\OFFSET, %eax
+	movl    $\VALUE, %ecx
+	movl    %ecx, (%eax)
+.endm
+.macro APIC_SPIN_WAIT
+	movl %ebx, %eax
+	addl $APIC_ICR_LREG, %eax
+	pause
+	testl $(1<<12), (%eax)
+	jz .-9
+.endm
+enable_apic:
+	// write 0 to error register
+	movl    $(0xFEE00000), %ebx
+	WRITE_APIC_REG APIC_ESR_REG, 0
+	OR_APIC_REG APIC_SPUR_INT_REG, 0x3, 8
+	OR_APIC_REG APIC_SPUR_INT_REG, 0xFF, 0
+	OR_APIC_REG APIC_ICR_HREG, 0x01, 24
+	WRITE_APIC_REG APIC_ICR_LREG, 0x4500
+	WRITE_APIC_REG APIC_ESR_REG, 0
+	OR_APIC_REG APIC_ICR_HREG, 0x01, 24
+	WRITE_APIC_REG APIC_ICR_LREG, 0x0602
+	WRITE_APIC_REG APIC_ICR_LREG, 0x0602
+	//APIC_SPIN_WAIT
+	retq	
 /*
   Stack design for each vcpu kernel
-    |           |
-    |           | <-- stack_start - 16, actual starting
-    | EMPTY     |
-    | PROC_ID   | <--- stack start	
+    |                       |
+    |                       | <-- stack_start - 16, actual starting
+    | EMPTY                 |
+    | POOL<<8 | PROC_ID     | <--- stack start
 */
+	
 long_mode:
-	movl    $(0x0000001B), %ecx
-	rdmsr
-	shrl $12, %eax
-	shll $12, %eax
-	movl %eax, %ebx
-	addl $0x0030, %ebx
-	//movl    $(0xFEC00000+0x30), %ebx
-	movl    (%ebx), %ecx
-	movw $PORT_HLT, %dx
-	out  %al, (%dx)
-	// send init ipi
-	movl    $(0xFEC00000+0x280), %ebx
-	movl    $0, (%ebx)
-	movl    $(0xFEC00000+0x310), %ebx
-	movl    $0x01, %eax
-	shll    $24, %eax
-	movl    %eax, (%ebx)
-	subl    $0x10, %ebx
-	movl    $0xC500, (%ebx)
-	pause
-	
-	movl    $(0xFEC00000+0x280), %ebx
-	movl    $0, (%ebx)	
-	movl    $(0xFEC00000+0x310), %ebx
-	movl    $0x01, %eax
-	shll    $24, %eax
-	movl    %eax, (%ebx)
-	subl    $0x10, %ebx
-	movl    $0x8500, (%ebx)
-	pause
-	
-	movl    $(0xFEC00000+0x280), %ebx
-	movl    $0, (%ebx)	
-	// send startup ipi to 2nd page
-	movl    $(0xFEC00000+0x310), %ebx
-	movl    $0x01, %eax
-	shll    $24, %eax
-	movl    %eax, (%ebx)
-	subl    $0x10, %ebx
-	movl    $0x0602, (%ebx)	 // 2nd page
-	pause
-
-	movl    $(0xFEC00000+0x280), %ebx
-	movl    $0, (%ebx)	
-	// send startup ipi to 2nd page
-	movl    $(0xFEC00000+0x310), %ebx
-	movl    $0x01, %eax
-	shll    $24, %eax
-	movl    %eax, (%ebx)
-	subl    $0x10, %ebx
-	movl    $0x0602, (%ebx)	 // 2nd page
-	pause
-	
 	// Set up the stack pointer and call into C.
 	subq    $16, %rsp
 	movw    $PORT_MY_ID, %dx
 	xor     %rax, %rax
 	inw     %dx, %ax
 	movq    $kern_stack, %rbx // store power on value, in its own id
-	leaq    (%rbx, %rax, 8), %rbx
+	movl    %eax, %ecx
+	andq    $0x00FF, %rcx
+	leaq    (%rbx, %rcx, 8), %rbx
 	movq    %rsp, (%rbx)
 	movq    %rsp, %rbp
 	shrq    $12, %rbp  // page aligned address
@@ -363,29 +410,38 @@ long_mode:
         movq    %rax, %es      // -> ES: Extra Segment
         movq    %rax, %ss      // -> SS: Stack Segment
 	call 	enable_sse
+	jmp     fill_idt_lock_grab_code
 fill_idt_lock_grab:
 	.quad	0x1
+fill_idt_lock_grab_code:	
 	xor     %rax, %rax
 	movq    $fill_idt_lock_grab, %rbx
 	xchgq   %rax, (%rbx)
-	test    %rax, %rax
+	testq   $0x1, %rax
 	jz      wait_for_fill_idt
+	//movw $SERIAL_PORT, %dx
+	//movb $'#', %al
+	//out  %al, (%dx)
+	//movb $'\n', %al
+	//out  %al, (%dx)		
 	call    fill_idt
+	call disable_pic
+	call enable_apic	
 // dont progress ahead until IDT's have been filled	
 	movq    $fill_idt_lock_grab, %rbx
-	movq    $1, (%rbx)
+	movq    $2, (%rbx)
 	jmp     skip_wait_for_fill_idt
-wait_for_fill_idt:
-	movq    $fill_idt_lock_grab, %rbx
-	cmp $1, (%rbx)
-	pause   // TBD idea is not to wait in busy loop
+wait_for_fill_idt:	
+	movq    $fill_idt_lock_grab, %rbx	
+	testq   $2, (%rbx)
+	pause   // TBD idea is not to wait in busy loop	
 	jne wait_for_fill_idt
 	//movq 	$idt, %rsi
 	//movq 	$0x40, %rdi
 	//call 	hex_dump_64
 skip_wait_for_fill_idt:	
         movq    $idt_descriptor, %rax
-        lidtq   (%rax)
+        lidtq   (%rax)	
 	callq   main
 	hlt
 
@@ -454,7 +510,7 @@ DATA_DESC_64:
 	.quad 0x00CF92000000FFFF
 	.quad 0x0000000000000000 // user code seg
 	.quad 0x0000000000000000 // user data seg
-	.fill 256, 16, 0	 // tss seg it is 16 bytes
+	.fill 512, 8, 0	 // tss seg it is 16 bytes
 	
 gdt64_end:
 .p2align 4

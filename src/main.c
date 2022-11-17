@@ -211,12 +211,13 @@ static mutex_t mutex_tss_fill_flush = 1;
 void init_boot()
 {
     int i;
-    uint8_t my_id;
+    uint8_t my_id, pool_sz;
     uint64_t stack_addr;
     gdt_entry_t *gdt_start = (gdt_entry_t *)gdt64_start_c;
     //my_id = inb(PORT_MY_ID);
     my_id = get_id();
-    printf("my id = %d\n", my_id);
+    pool_sz = get_pool_sz();
+    printf("my id = %d, pool_sz = %d\n", my_id, pool_sz);
     // zero out the bss section
     mutex_lock_busy_wait(&mutex_bss_load);
     //mutex_lock_pause(&mutex_bss_load);
