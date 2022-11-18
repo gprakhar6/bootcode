@@ -9,6 +9,7 @@
 #include "pic.h"
 #include "msrs.h"
 #include "sched.h"
+#include "apic.h"
 
 int user_test_function();
 void init_boot();
@@ -21,11 +22,6 @@ extern uint64_t kern_stack[];
 struct tss_entry_t __attribute__((aligned(64))) tss_seg[MAX_CPUS];
 uint8_t __attribute__((aligned(16))) user_stack[16*32];
 
-void kern_test()
-{
-    uint8_t *apic_base = 0xFEC00000;
-    printf("apicid: %08X\n", *(uint32_t *)(apic_base + 0x20));
-}
 void user_test_func() {
     volatile uint64_t t1, t2, d, i, n, a, b;
     n = 100;
@@ -58,6 +54,27 @@ void user_test_func() {
     return;
 }
 
+void send_ipi()
+{
+    int i;
+    struct apic_t *apic = 0xFEE00000;
+    if(get_id() == 0) {
+	apic->esr = 0;
+	apic->icrh = (0x01) << 24;
+	apic->icrl = ICRL(0x40);
+	//while( (1 < 12) & apic->icrl == 0);
+	//printf("ipi sent\n");
+	//while(1)
+	//    printf("esr: %08X\n", apic->esr);;
+    }
+    else {
+	return;
+	while(1) {
+	    printf("bit: %d\n", read_apic_bit_pack(apic->irr, 0x40));
+	}
+    }
+}
+
 int main()
 {
     pde_t *pde;
@@ -69,6 +86,10 @@ int main()
     //mutex_init(&mutex_printf);
     printf("Calling init boot\n");
     init_boot();
+    asm("sti");
+    barrier();
+    printf("Barrier in %d\n", get_id());
+    send_ipi();
     while(1);
 #if 0    
     pde = addr_to_pde((void *)boot_p4, 0x200000, (uint64_t **)pe);

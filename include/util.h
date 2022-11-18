@@ -6,6 +6,11 @@
 
 #include "hw_types.h"
 
+#define ATOMIC_INCQ(x) asm("lock\n incq (%0)\n" ::"r"(x))
+#define ATOMIC_DECQ(x) asm("lock\n decq (%0)\n" ::"r"(x))
+
+extern uint64_t barrier_word[], barrier_flag[], barrier_mutex[];
+
 volatile static inline uint16_t get_pool_and_id()
 {
     uint64_t rax;
@@ -76,7 +81,7 @@ volatile static inline uint64_t mutex_lock(mutex_t *m)
     return rax;
 }
 
-static inline void outb(uint16_t port, uint8_t val)
+inline void outb(uint16_t port, uint8_t val)
 {
     asm volatile ( "outb %0, %1" : : "a"(val), "Nd"(port) );
     /* There's an outb %al, $imm8  encoding, for compile-time constant port numbers that fit in 8b.  (N constraint).
@@ -85,7 +90,7 @@ static inline void outb(uint16_t port, uint8_t val)
      * %1 expands to %dx because  port  is a uint16_t.  %w1 could be used if we had the port number a wider C type */
 }
 
-static inline uint8_t inb(uint16_t port)
+inline uint8_t inb(uint16_t port)
 {
     uint8_t ret;
     asm volatile ( "inb %1, %0"
@@ -97,6 +102,23 @@ static inline uint8_t inb(uint16_t port)
 static inline void io_wait(void)
 {
     outb(0x3f8, '\n');
+}
+
+static inline void barrier()
+{
+    uint8_t ncpus = get_pool_sz();
+    while(*barrier_flag != 0) asm("pause");
+
+    ATOMIC_INCQ(barrier_word);
+    if(*barrier_word == ncpus) {
+	*barrier_flag = 1;
+    }
+    else {
+	while(*barrier_flag != 1) asm("pause");
+    }
+    ATOMIC_DECQ(barrier_word);
+    if(*barrier_word == 0)
+	*barrier_flag = 0;
 }
 
 extern uint64_t tsc(); // defined in boot.S

@@ -52,6 +52,11 @@ void null_func(struct stack_frame_err_t *sf) {
     return;
 }
 
+void test_ipi(struct stack_frame_err_t *sf)
+{
+    printf("Got the IPI\n");
+    
+}
 static char pf_err_code[][128] =
 {
     "0:nopresent",

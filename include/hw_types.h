@@ -78,4 +78,44 @@ struct __attribute__((packed)) sys_desc_t {
 };
 
 typedef uint64_t mutex_t;
+
+typedef struct  {
+	uint32_t bits;
+	uint8_t reserved[12];    
+} apic_bit_pack_t;
+
+struct __attribute__((packed))apic_t {
+    uint8_t empty0[32];
+    uint32_t id;
+    uint8_t reserved0[12];
+    uint32_t ver;
+    uint8_t reserved1[12];
+    uint8_t empty1[0x40];
+    uint32_t tpr; // task priority register
+    uint8_t reserved2[12];
+    uint32_t apr; // arbitration priority register
+    uint8_t reserved3[12];
+    uint32_t ppr; // processor priority register
+    uint8_t reserved4[12];
+    uint32_t eoi; // end of interrupt
+    uint8_t reserved5[12];
+    uint32_t rrr; // remote read register
+    uint8_t reserved6[12];
+    uint32_t ldr; // Logical Destination Register (LDR);
+    uint8_t reserved7[12];
+    uint32_t dfr; // Destination Format Register (DFR);
+    uint8_t reserved8[12];
+    uint32_t spur_int_vec; // Spurious Interrupt Vector Register;
+    uint8_t reserved9[12];
+    apic_bit_pack_t isr[8]; // inservice register
+    apic_bit_pack_t tmr[8]; // trigger mode register
+    apic_bit_pack_t irr[8];    // interrupt request register
+    uint32_t esr; // error status register
+    uint8_t reserver10[12];
+    uint8_t reserver101[0x70];
+    uint32_t icrl;
+    uint8_t reserved11[12];
+    uint32_t icrh;
+    uint8_t reserved12[12];    
+};
 #endif

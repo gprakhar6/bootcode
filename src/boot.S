@@ -29,10 +29,15 @@
 
 
 .equ APIC_ID_REG,          (0x20)
+.equ APIC_TPR_REG,         (0x80)
+.equ APIC_EOI_REG,         (0xB0)
+.equ APIC_LDR_REG,         (0xD0)
+.equ APIC_DFR_REG,         (0xE0)
 .equ APIC_SPUR_INT_REG,    (0xF0)
 .equ APIC_ESR_REG,         (0x280)
 .equ APIC_ICR_LREG,        (0x300)
 .equ APIC_ICR_HREG,        (0x310)
+	
 //.equ APIC_ID_REG          (0x20)
 //.equ APIC_ID_REG          (0x20)
 
@@ -366,18 +371,27 @@ disable_pic:
 	testl $(1<<12), (%eax)
 	jz .-9
 .endm
+
 enable_apic:
 	// write 0 to error register
 	movl    $(0xFEE00000), %ebx
 	WRITE_APIC_REG APIC_ESR_REG, 0
-	OR_APIC_REG APIC_SPUR_INT_REG, 0x3, 8
+	OR_APIC_REG APIC_SPUR_INT_REG, 0x1, 8
 	OR_APIC_REG APIC_SPUR_INT_REG, 0xFF, 0
+	WRITE_APIC_REG APIC_LDR_REG, 0
+	WRITE_APIC_REG APIC_TPR_REG, 0
+	WRITE_APIC_REG APIC_DFR_REG, 0xFFFFFFFF
+	WRITE_APIC_REG APIC_EOI_REG, 0x0
+	retq
+
+send_init_startup_to_all:
+	movl    $(0xFEE00000), %ebx
 	OR_APIC_REG APIC_ICR_HREG, 0x01, 24
 	WRITE_APIC_REG APIC_ICR_LREG, 0x4500
 	WRITE_APIC_REG APIC_ESR_REG, 0
 	OR_APIC_REG APIC_ICR_HREG, 0x01, 24
 	WRITE_APIC_REG APIC_ICR_LREG, 0x0602
-	WRITE_APIC_REG APIC_ICR_LREG, 0x0602
+	//WRITE_APIC_REG APIC_ICR_LREG, 0x0602
 	//APIC_SPIN_WAIT
 	retq	
 /*
@@ -410,6 +424,8 @@ long_mode:
         movq    %rax, %es      // -> ES: Extra Segment
         movq    %rax, %ss      // -> SS: Stack Segment
 	call 	enable_sse
+	call    disable_pic
+	call    enable_apic
 	jmp     fill_idt_lock_grab_code
 fill_idt_lock_grab:
 	.quad	0x1
@@ -425,8 +441,7 @@ fill_idt_lock_grab_code:
 	//movb $'\n', %al
 	//out  %al, (%dx)		
 	call    fill_idt
-	call disable_pic
-	call enable_apic	
+	call    send_init_startup_to_all
 // dont progress ahead until IDT's have been filled	
 	movq    $fill_idt_lock_grab, %rbx
 	movq    $2, (%rbx)
@@ -526,7 +541,14 @@ no_err_code:
 	1, 0, 1, 1, 1, 0, 1, 1
 .fill 232, 1, 1
 no_err_code_sz = . - no_err_code
-	
+
+.globl barrier_word, barrier_flag, barrier_mutex
+barrier_flag:
+	.quad 0
+barrier_word:
+	.quad 0
+barrier_mutex:
+	.quad 0
 // maybe this is useless? delete it later
 scratch_pad:
 .rept 512
