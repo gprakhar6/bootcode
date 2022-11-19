@@ -10,6 +10,7 @@
 #include "msrs.h"
 #include "sched.h"
 #include "apic.h"
+#include "kvm_para.h"
 
 int user_test_function();
 void init_boot();
@@ -58,10 +59,13 @@ void send_ipi()
 {
     int i;
     struct apic_t *apic = 0xFEE00000;
+
+    //printf("id(%d) = apicid(%d)\n", (int)get_id(), apic->id >> 24);
+    return;
     if(get_id() == 0) {
 	apic->esr = 0;
-	apic->icrh = (0x01) << 24;
-	apic->icrl = ICRL(0x40);
+	//apic->icrh = (0x01) << 24;
+	apic->icrl = ICRL(0x40) | (0xC << 16);
 	//while( (1 < 12) & apic->icrl == 0);
 	//printf("ipi sent\n");
 	//while(1)
@@ -70,7 +74,7 @@ void send_ipi()
     else {
 	return;
 	while(1) {
-	    printf("bit: %d\n", read_apic_bit_pack(apic->irr, 0x40));
+	    //printf("bit: %d\n", read_apic_bit_pack(apic->irr, 0x40));
 	}
     }
 }
@@ -87,6 +91,8 @@ int main()
     printf("Calling init boot\n");
     init_boot();
     asm("sti");
+    printf("Barrier waiting %d\n", get_id());
+    //vmmcall(5, 1);
     barrier();
     printf("Barrier in %d\n", get_id());
     send_ipi();
@@ -227,8 +233,8 @@ void set_syscall_msrs()
     set_msr(MSR_SFMASK, 0, 0);
 }
 
-static mutex_t mutex_bss_load = 1;
-static mutex_t mutex_tss_fill_flush = 1;
+static mutex_t mutex_bss_load = {0,1};
+static mutex_t mutex_tss_fill_flush = {0,1};
 void init_boot()
 {
     int i;
@@ -254,13 +260,13 @@ void init_boot()
     // must happen as atomic
     // if one processor modified tss, while other
     // does ltr, perhaps that is the issue
-    mutex_lock_pause(&mutex_tss_fill_flush);
+    mutex_lock_hlt(&mutex_tss_fill_flush);
     fill_tss(&tss_seg[my_id], (struct sys_desc_t *)&gdt_start[my_id+5],
 	stack_addr);
     
     printf("Flushing TSS\n");
     flush_tss(my_id);
-    mutex_unlock(&mutex_tss_fill_flush);
+    mutex_unlock_hlt(&mutex_tss_fill_flush);
     printf("Filling user mode gdt\n");
     fill_user_mode_gdt();
     printf("Setting up syscalls\n");

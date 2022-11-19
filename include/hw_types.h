@@ -77,7 +77,11 @@ struct __attribute__((packed)) sys_desc_t {
     uint32_t reserved2		: 19;
 };
 
-typedef uint64_t mutex_t;
+typedef struct __attribute__((packed)) {
+    uint64_t waiting_cpus;
+    uint64_t m; 
+} mutex_t;
+
 
 typedef struct  {
 	uint32_t bits;

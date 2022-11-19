@@ -386,11 +386,11 @@ enable_apic:
 
 send_init_startup_to_all:
 	movl    $(0xFEE00000), %ebx
-	OR_APIC_REG APIC_ICR_HREG, 0x01, 24
-	WRITE_APIC_REG APIC_ICR_LREG, 0x4500
-	WRITE_APIC_REG APIC_ESR_REG, 0
-	OR_APIC_REG APIC_ICR_HREG, 0x01, 24
-	WRITE_APIC_REG APIC_ICR_LREG, 0x0602
+	//OR_APIC_REG APIC_ICR_HREG, 0x01, 24
+	WRITE_APIC_REG APIC_ICR_LREG, 0xC4500
+	//WRITE_APIC_REG APIC_ESR_REG, 0
+	//OR_APIC_REG APIC_ICR_HREG, 0x01, 24
+	WRITE_APIC_REG APIC_ICR_LREG, 0xC0602
 	//WRITE_APIC_REG APIC_ICR_LREG, 0x0602
 	//APIC_SPIN_WAIT
 	retq	
@@ -456,7 +456,12 @@ wait_for_fill_idt:
 	//call 	hex_dump_64
 skip_wait_for_fill_idt:	
         movq    $idt_descriptor, %rax
-        lidtq   (%rax)	
+        lidtq   (%rax)
+	movw $SERIAL_PORT, %dx
+	//movb $'#', %al
+	//out  %al, (%dx)
+	//movb $'\n', %al
+	//out  %al, (%dx)			
 	callq   main
 	hlt
 
@@ -548,6 +553,7 @@ barrier_flag:
 barrier_word:
 	.quad 0
 barrier_mutex:
+	.quad 0
 	.quad 0
 // maybe this is useless? delete it later
 scratch_pad:
