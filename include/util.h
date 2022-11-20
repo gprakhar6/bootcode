@@ -64,7 +64,7 @@ volatile static inline uint16_t get_pool_and_id()
 	"shrq $12, %0\n"
 	"addq $1, %0\n"
 	"shlq $12, %0\n"
-	"movq (%0), %0" : "=r"(rax));
+	"movq -8(%0), %0" : "=r"(rax));
     return (uint16_t)rax;
 }
 
@@ -75,7 +75,7 @@ volatile static inline uint8_t get_pool_sz()
 	"shrq $12, %0\n"
 	"addq $1, %0\n"
 	"shlq $12, %0\n"
-	"movq (%0), %0" : "=r"(rax));
+	"movq -8(%0), %0" : "=r"(rax));
     return (uint8_t)((rax & 0xFF00) >> 8);
 }
 
@@ -86,7 +86,7 @@ volatile static inline uint8_t get_id()
 	"shrq $12, %0\n"
 	"addq $1, %0\n"
 	"shlq $12, %0\n"
-	"movq (%0), %0" : "=r"(rax));
+	"movq -8(%0), %0" : "=r"(rax));
     return (uint8_t)(rax & 0x00FF);
 }
 

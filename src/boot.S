@@ -64,7 +64,6 @@
 .endm
 
 .globl no_err_code, no_err_code_sz
-.extern STACK_START
 .text
 .globl __reset
 .code16
@@ -403,11 +402,14 @@ send_init_startup_to_all:
 */
 	
 long_mode:
-	// Set up the stack pointer and call into C.
+	// Set up the stack pointer and call into C.	
 	subq    $16, %rsp
-	movw    $PORT_MY_ID, %dx
-	xor     %rax, %rax
-	inw     %dx, %ax
+	movq    %r11, %rax
+	shlq    $8, %rax
+	orq     %r10, %rax
+	//movw    $PORT_MY_ID, %dx // saved a vmexit here
+	//xor     %rax, %rax
+	//inw     %dx, %ax
 	movq    $kern_stack, %rbx // store power on value, in its own id
 	movl    %eax, %ecx
 	andq    $0x00FF, %rcx
@@ -417,7 +419,7 @@ long_mode:
 	shrq    $12, %rbp  // page aligned address
 	addq    $1, %rbp
 	shlq    $12, %rbp
-	movq    %rax, (%rbp)
+	movq    %rax, -8(%rbp)
 	movq 	%rsp, %rbp
         movq    $(DATA_DESC_64 - NULL_DESC_64), %rax    // Our data segment selector
         movq    %rax, %ds      // -> DS: Data Segment
@@ -445,28 +447,28 @@ fill_idt_lock_grab_code:
 	movw    $PORT_MSG, %dx
 	movw    $'1', %ax
 	outw    %ax, (%dx)
-	//movb $'\n', %al
-	//out  %al, (%dx)	
 // dont progress ahead until IDT's have been filled	
 	movq    $fill_idt_lock_grab, %rbx
 	movq    $2, (%rbx)
 	jmp     skip_wait_for_fill_idt
 wait_for_fill_idt:	
-	movq    $fill_idt_lock_grab, %rbx	
+	movq    $fill_idt_lock_grab, %rbx
+wait_for_fill_idt_loop:	
 	testq   $2, (%rbx)
+	je      skip_wait_for_fill_idt
 	pause   // TBD idea is not to wait in busy loop	
-	jne wait_for_fill_idt
+	jmp     wait_for_fill_idt_loop
 	//movq 	$idt, %rsi
 	//movq 	$0x40, %rdi
 	//call 	hex_dump_64
 skip_wait_for_fill_idt:	
         movq    $idt_descriptor, %rax
         lidtq   (%rax)
-	movw $SERIAL_PORT, %dx
+	//movw $SERIAL_PORT, %dx
 	//movb $'#', %al
 	//out  %al, (%dx)
 	//movb $'\n', %al
-	//out  %al, (%dx)			
+	//out  %al, (%dx)
 	callq   main
 	hlt
 
