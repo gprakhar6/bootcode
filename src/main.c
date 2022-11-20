@@ -13,7 +13,7 @@
 #include "kvm_para.h"
 
 int user_test_function();
-void init_boot();
+void init_boot(uint8_t my_id, uint8_t pool_sz);
 extern void flush_tss(uint8_t id);
 
 extern char __syscall_entry[];
@@ -85,16 +85,22 @@ int main()
     pde_t *p1,*p2,*p3;
     pde_t **pe[3] = {&p1, &p2, &p3};
     volatile uint64_t i, j;
-    uint8_t my_id;
+    uint8_t my_id, pool_sz;
+    uint16_t my_id_pool_sz;
     void (*fptrs[2])();
+    my_id_pool_sz = get_pool_and_id();
+    my_id = my_id_pool_sz & 0xFF;
+    pool_sz = (uint8_t)((my_id_pool_sz & 0xFF00) >> 8);
     //mutex_init(&mutex_printf);
-    printf("Calling init boot\n");
-    init_boot();
+    //printf("Calling init boot\n");
+    init_boot(my_id, pool_sz);
     //asm("sti");
-    printf("Barrier waiting %d\n", get_id());
-    //vmmcall(5, 1);
+    //printf("Barrier waiting %d\n", get_id());
     barrier();
-    printf("Barrier in %d\n", get_id());
+    //if(my_id == 0) {
+    //printf("Barrier in %d\n", get_id());
+	outb(PORT_HLT, 0);
+	//}
     //send_ipi();
     asm("hlt");
     while(1);
@@ -222,7 +228,7 @@ void set_syscall_msrs()
 {
     uint64_t addr;
     uint32_t ss_cs, star, addr_h, addr_l;
-    printf("In %s\n", __func__);
+    //printf("In %s\n", __func__);
     // 0x10 is ss 0x08 is code segment
     ss_cs = (0x08);
     star = ((ss_cs << 16) | ss_cs);
@@ -236,25 +242,24 @@ void set_syscall_msrs()
 
 static mutex_t mutex_bss_load = {0,1};
 static mutex_t mutex_tss_fill_flush = {0,1};
-void init_boot()
+void init_boot(uint8_t my_id, uint8_t pool_sz)
 {
     int i;
-    uint8_t my_id, pool_sz;
     uint64_t stack_addr;
     gdt_entry_t *gdt_start = (gdt_entry_t *)gdt64_start_c;
     //my_id = inb(PORT_MY_ID);
-    my_id = get_id();
-    pool_sz = get_pool_sz();
-    printf("my id = %d, pool_sz = %d\n", my_id, pool_sz);
+    //my_id = get_id();
+    //pool_sz = get_pool_sz();
+    //printf("my id = %d, pool_sz = %d\n", my_id, pool_sz);
     // zero out the bss section
     mutex_lock_busy_wait(&mutex_bss_load);
     //mutex_lock_pause(&mutex_bss_load);
     memset((void *)bss_start, 0, bss_size);
     mutex_unlock(&mutex_bss_load);
-    printf("Filling TSS\n");
+    //printf("Filling TSS\n");
     // my_id+5 because first 4 entries are occupied in gdt
     stack_addr = *(uint64_t *)(kern_stack + my_id); // keep some 16 bytes free
-    printf("stack_addr[%d] = %llX\n", my_id, stack_addr);
+    //printf("stack_addr[%d] = %llX\n", my_id, stack_addr);
 
 
     // perhaps the tss filling and flushing
@@ -265,12 +270,12 @@ void init_boot()
     fill_tss(&tss_seg[my_id], (struct sys_desc_t *)&gdt_start[my_id+5],
 	stack_addr);
     
-    printf("Flushing TSS\n");
+    //printf("Flushing TSS\n");
     flush_tss(my_id);
     mutex_unlock_hlt(&mutex_tss_fill_flush);
-    printf("Filling user mode gdt\n");
+    //printf("Filling user mode gdt\n");
     fill_user_mode_gdt();
-    printf("Setting up syscalls\n");
+    //printf("Setting up syscalls\n");
     set_syscall_msrs();
 //    for(i = 0; i <= 6; i++)
 //	printf("descriptor[%d] = %016llX\n", i, *(uint64_t *)&gdt_start[i]);    

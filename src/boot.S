@@ -1,3 +1,4 @@
+.equ MAX_VCPUS,         64
 .equ MSR_EFER		, 0xC0000080
 .equ EFER_LM		, 0x100
 .equ EFER_LMA		, (0x1 << 10)	
@@ -11,6 +12,7 @@
 .equ PG_USER		, 0x4
 .equ PG_BIG		, 0x80
 .equ PG_PCD             , 0x10 // page cache disable
+.equ PG_GLOBAL          , 0x100 // page global	
 .equ PG_NO_EXEC		, 0x8000000000000000
 .equ LOG_TABLE_SIZE	, 9
 .equ LOG_PAGE_SIZE	, 12
@@ -74,7 +76,9 @@ __reset:
 	//call check_cpuid
 	movl $0b10100000, %eax             // Set the PAE and PGE bit.
 	movl %eax, %cr4
-	movl $boot_p4, %eax
+	movl $(boot_p4), %eax
+	imull $(512*3), %ecx
+	leal (%eax, %ecx, 8), %eax
 	movl %eax, %cr3
 	movl $(MSR_EFER), %ecx             // Read from the EFER MSR. 
 	rdmsr
@@ -628,26 +632,30 @@ kern_stack:
 // paging structures
 .section .paging, "aw", @progbits
 .p2align 12 // page align
+
+apic_page:
+	.fill 503, 8, 0
+	.quad (0xFEE00000 + PG_PRESENT + PG_WRITABLE + PG_BIG + PG_PCD + PG_GLOBAL)
+	.fill 8, 8, 0	
 .globl boot_p4
+	
 boot_p4:
-        .quad (boot_p3 + PG_PRESENT + PG_WRITABLE + PG_USER)
+.rept MAX_VCPUS // max vcpus	
+        .quad (. + (512 * 8) + PG_PRESENT + PG_WRITABLE + PG_USER)
         .fill 511, 8, 0
 
-boot_p3:
-        .quad (boot_p2 + PG_PRESENT + PG_WRITABLE + PG_USER)
+//boot_p3:
+        .quad (. + (512 * 8) + PG_PRESENT + PG_WRITABLE + PG_USER)
 	.quad 0 // 1 gb
 	.quad 0 // 2
 	.quad (apic_page + PG_PRESENT + PG_WRITABLE + PG_USER) // 3 gb
         .fill 508, 8, 0
 
-boot_p2:
-.set pg, 0
-  .rept 512
-    .quad (pg + PG_PRESENT + PG_WRITABLE + PG_BIG)
-    .set pg, pg+(PAGE_SIZE * 512)
-  .endr	
+//boot_p2:
+	.set pg, 0
+	.rept 512
+		.quad (pg + PG_PRESENT + PG_WRITABLE + PG_BIG + PG_GLOBAL)
+		.set pg, pg+(PAGE_SIZE * 512)
+	.endr	
 
-apic_page:
-	.fill 503, 8, 0
-	.quad (0xFEE00000 + PG_PRESENT + PG_WRITABLE + PG_BIG + PG_PCD)
-	.fill 8, 8, 0
+.endr	

@@ -139,7 +139,7 @@ volatile static inline void cond_set(cond_t *c, uint64_t v)
 	bm = id & (-id);
 	wake_cpu = blog2(bm);
 	id = (~bm) & id;
-	printf("wakking cpu %d\n", wake_cpu);
+	//printf("wakking cpu %d\n", wake_cpu);
 	vmmcall(KVM_HC_KICK_CPU, 0, wake_cpu);
     }
 }
