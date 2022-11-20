@@ -79,6 +79,11 @@ struct __attribute__((packed)) sys_desc_t {
 
 typedef struct __attribute__((packed)) {
     uint64_t waiting_cpus;
+    uint64_t c; 
+} cond_t; // conditional
+
+typedef struct __attribute__((packed)) {
+    uint64_t waiting_cpus;
     uint64_t m; 
 } mutex_t;
 

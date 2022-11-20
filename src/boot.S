@@ -23,8 +23,8 @@
 .equ EXCEPTION_GATE,      (0xf)	
 .equ SERIAL_PORT,         (0x3f8)
 .equ PORT_HLT,            (0x3fa)	
-.equ PORT_MY_ID,          (0x3fc)
-	
+.equ PORT_MY_ID,          (0x3fc) // and 3fd perhaps
+.equ PORT_MSG,            (0x3fe) // and 3ff
 .equ IST,         	  (0x0) // interrupt stack table
 
 
@@ -439,9 +439,14 @@ fill_idt_lock_grab_code:
 	//movb $'#', %al
 	//out  %al, (%dx)
 	//movb $'\n', %al
-	//out  %al, (%dx)		
+	//out  %al, (%dx)
 	call    fill_idt
 	call    send_init_startup_to_all
+	movw    $PORT_MSG, %dx
+	movw    $'1', %ax
+	outw    %ax, (%dx)
+	//movb $'\n', %al
+	//out  %al, (%dx)	
 // dont progress ahead until IDT's have been filled	
 	movq    $fill_idt_lock_grab, %rbx
 	movq    $2, (%rbx)
@@ -547,13 +552,11 @@ no_err_code:
 .fill 232, 1, 1
 no_err_code_sz = . - no_err_code
 
-.globl barrier_word, barrier_flag, barrier_mutex
-barrier_flag:
+.globl barrier_word, barrier_cond
+barrier_cond:
+	.quad 0
 	.quad 0
 barrier_word:
-	.quad 0
-barrier_mutex:
-	.quad 0
 	.quad 0
 // maybe this is useless? delete it later
 scratch_pad:

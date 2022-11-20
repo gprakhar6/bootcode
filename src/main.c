@@ -90,12 +90,13 @@ int main()
     //mutex_init(&mutex_printf);
     printf("Calling init boot\n");
     init_boot();
-    asm("sti");
+    //asm("sti");
     printf("Barrier waiting %d\n", get_id());
     //vmmcall(5, 1);
     barrier();
     printf("Barrier in %d\n", get_id());
-    send_ipi();
+    //send_ipi();
+    asm("hlt");
     while(1);
 #if 0    
     pde = addr_to_pde((void *)boot_p4, 0x200000, (uint64_t **)pe);

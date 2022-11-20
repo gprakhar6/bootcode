@@ -11,7 +11,7 @@
 #define ATOMIC_INCQ(x) asm("lock\n incq (%0)\n" ::"r"(x))
 #define ATOMIC_DECQ(x) asm("lock\n decq (%0)\n" ::"r"(x))
 
-extern uint64_t barrier_word[], barrier_flag[], barrier_mutex[];
+extern uint64_t barrier_word[], barrier_cond[];
 
 #define GET_VMMCALL_NAME(_1,_2,_3,_4, NAME, ...) NAME
 // upto 4 arguments rbx, rcx, rdx, and rsi
@@ -97,6 +97,53 @@ volatile static inline uint8_t blog2(uint64_t x)
 	id++;
     return id;
 }
+
+volatile static inline void cond_wait(cond_t *c, uint64_t v)
+{
+    uint64_t id;
+    asm volatile ("sfence");
+    if(c->c == v)
+	goto out;
+    else {
+	id = ((uint64_t)0x1 << get_id());
+    loop:
+	asm volatile ("lock\n"
+		      "orq %0, (%1)\n"
+		      "hlt": "+r"(id) : "r"(&c->waiting_cpus));
+	// TBD: is mfence required? or sfence sufficient
+	// we want c->c = v, to be completed before this statement
+	asm volatile ("sfence");
+	if(c->c == v) {
+	    // i got the lock, remove the waiting bit
+	    id = ~id;
+	    asm volatile ("lock\n"
+			  "andq %0, (%1)": "+r"(id) : "r"(&c->waiting_cpus));		    
+	}
+	else {
+	    goto loop;
+	}
+    }
+
+out:
+    return;
+}
+
+volatile static inline void cond_set(cond_t *c, uint64_t v)
+{
+    uint8_t wake_cpu;
+    uint64_t id, bm;
+    c->c = v;
+    id = c->waiting_cpus;
+
+    while(id != 0) {
+	bm = id & (-id);
+	wake_cpu = blog2(bm);
+	id = (~bm) & id;
+	printf("wakking cpu %d\n", wake_cpu);
+	vmmcall(KVM_HC_KICK_CPU, 0, wake_cpu);
+    }
+}
+
 volatile static inline void mutex_init(mutex_t *m)
 {
     asm volatile("movq $1, (%%rax)" :: "a"(&m->m));
@@ -116,7 +163,7 @@ volatile static inline void mutex_unlock_hlt(mutex_t *m)
     id = m->waiting_cpus;
     if(id != 0) {
 	wake_cpu = blog2((id & (-id)));
-	printf("waking cpu %d\n", wake_cpu);
+	//printf("waking cpu %d\n", wake_cpu);
 	vmmcall(KVM_HC_KICK_CPU, 0, wake_cpu);
     }
 }
@@ -186,18 +233,18 @@ static inline void io_wait(void)
 static inline void barrier()
 {
     uint8_t ncpus = get_pool_sz();
-    while(*barrier_flag != 0) asm("pause");
+    cond_wait(barrier_cond, 0);
 
     ATOMIC_INCQ(barrier_word);
     if(*barrier_word == ncpus) {
-	*barrier_flag = 1;
+	cond_set(barrier_cond, 1);
     }
     else {
-	while(*barrier_flag != 1) asm("pause");
+	cond_wait(barrier_cond, 1);
     }
     ATOMIC_DECQ(barrier_word);
     if(*barrier_word == 0)
-	*barrier_flag = 0;
+	cond_set(barrier_cond, 0);
 }
 
 extern uint64_t tsc(); // defined in boot.S
