@@ -81,13 +81,10 @@ void send_ipi()
 
 int main()
 {
-    pde_t *pde;
-    pde_t *p1,*p2,*p3;
-    pde_t **pe[3] = {&p1, &p2, &p3};
-    volatile uint64_t i, j;
     uint8_t my_id, pool_sz;
     uint16_t my_id_pool_sz;
-    void (*fptrs[2])();
+    int i;
+    uint64_t *addr = (uint64_t *)0x0008;
     my_id_pool_sz = get_pool_and_id();
     my_id = my_id_pool_sz & 0xFF;
     pool_sz = (uint8_t)((my_id_pool_sz & 0xFF00) >> 8);
@@ -97,36 +94,31 @@ int main()
     //asm("sti");
     //printf("Barrier waiting %d\n", get_id());
     barrier();
-    //if(my_id == 0) {
-    //printf("Barrier in %d\n", get_id());
-	outb(PORT_HLT, 0);
-	//}
-    //send_ipi();
-    asm("hlt");
+    //printf("Barier in %d\n", my_id);
+    if(my_id != 0) {
+	//printf("halting\ %d\n", my_id);
+	asm("hlt");
+    }
+    else
+	outw(PORT_MSG, MSG_BOOTED);
+
+    for(i = 0; i < 3; i++)
+    {
+	printf("%lX\n", addr[i]);
+    }
     while(1);
 #if 0    
-    pde = addr_to_pde((void *)boot_p4, 0x200000, (uint64_t **)pe);
-    p1->pde |= U_BIT;
-    p2->pde |= U_BIT;
-    p3->pde |= U_BIT;
-    memcpy(0x200100, &user_test_func, 0x1000);
+    //pde = addr_to_pde((void *)boot_p4, 0x200000, (uint64_t **)pe);
+    //p1->pde |= U_BIT;
+    //p2->pde |= U_BIT;
+    //p3->pde |= U_BIT;
+    //memcpy(0x200100, &user_test_func, 0x1000);
 //    PIC_remap(PIC_REMAP, PIC_REMAP + 0x08);
 //    for(i = 0; i <= 0xf; i++)
 //	IRQ_clear_mask(i);
-    fptrs[0] = (void (*)())0x200100;
-    fptrs[1] = (void (*)())0x200100;
 #endif
     //outb(PORT_WAIT_USER_CODE_MAPPING, 1);
     //outb(PORT_HLT, 0);
-    for(i=((uint64_t)0x1 << 30); i>0; i--);
-    my_id = get_id();
-    outb(PORT_MY_ID, my_id);
-    outb(PORT_HLT, 0);
-    scheduler_init(fptrs, 2);
-    scheduler();
-    printf("Jumping to user func\n");
-    //jump_usermode(user_test_func, user_stack + sizeof(user_stack) - 16);
-    printf("Not expected to be here");
     return 0;
 }
 
@@ -252,10 +244,10 @@ void init_boot(uint8_t my_id, uint8_t pool_sz)
     //pool_sz = get_pool_sz();
     //printf("my id = %d, pool_sz = %d\n", my_id, pool_sz);
     // zero out the bss section
-    mutex_lock_busy_wait(&mutex_bss_load);
+    mutex_lock_hlt(&mutex_bss_load);
     //mutex_lock_pause(&mutex_bss_load);
     memset((void *)bss_start, 0, bss_size);
-    mutex_unlock(&mutex_bss_load);
+    mutex_unlock_hlt(&mutex_bss_load);
     //printf("Filling TSS\n");
     // my_id+5 because first 4 entries are occupied in gdt
     stack_addr = *(uint64_t *)(kern_stack + my_id); // keep some 16 bytes free

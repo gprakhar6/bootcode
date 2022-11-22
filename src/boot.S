@@ -40,6 +40,7 @@
 .equ APIC_ICR_LREG,        (0x300)
 .equ APIC_ICR_HREG,        (0x310)
 	
+.equ MSG_SENT_INIT_START,  (0x1)
 //.equ APIC_ID_REG          (0x20)
 //.equ APIC_ID_REG          (0x20)
 
@@ -77,7 +78,7 @@ __reset:
 	movl $0b10100000, %eax             // Set the PAE and PGE bit.
 	movl %eax, %cr4
 	movl $(boot_p4), %eax
-	imull $(512*3), %ecx
+	imull $(512*2), %ecx
 	leal (%eax, %ecx, 8), %eax
 	movl %eax, %cr3
 	movl $(MSR_EFER), %ecx             // Read from the EFER MSR. 
@@ -449,7 +450,7 @@ fill_idt_lock_grab_code:
 	call    fill_idt
 	call    send_init_startup_to_all
 	movw    $PORT_MSG, %dx
-	movw    $'1', %ax
+	movw    $MSG_SENT_INIT_START, %ax
 	outw    %ax, (%dx)
 // dont progress ahead until IDT's have been filled	
 	movq    $fill_idt_lock_grab, %rbx
@@ -636,26 +637,26 @@ kern_stack:
 apic_page:
 	.fill 503, 8, 0
 	.quad (0xFEE00000 + PG_PRESENT + PG_WRITABLE + PG_BIG + PG_PCD + PG_GLOBAL)
-	.fill 8, 8, 0	
+	.fill 8, 8, 0
+
+kern_pt:
+	.set pg, 0
+	.rept 512
+		.quad (pg + PG_PRESENT + PG_WRITABLE + PG_BIG + PG_GLOBAL)
+		.set pg, pg+(PAGE_SIZE * 512)
+	.endr	
+
 .globl boot_p4
-	
 boot_p4:
 .rept MAX_VCPUS // max vcpus	
         .quad (. + (512 * 8) + PG_PRESENT + PG_WRITABLE + PG_USER)
         .fill 511, 8, 0
 
 //boot_p3:
-        .quad (. + (512 * 8) + PG_PRESENT + PG_WRITABLE + PG_USER)
+        .quad (kern_pt + PG_PRESENT + PG_WRITABLE + PG_USER)
 	.quad 0 // 1 gb
 	.quad 0 // 2
 	.quad (apic_page + PG_PRESENT + PG_WRITABLE + PG_USER) // 3 gb
         .fill 508, 8, 0
-
-//boot_p2:
-	.set pg, 0
-	.rept 512
-		.quad (pg + PG_PRESENT + PG_WRITABLE + PG_BIG + PG_GLOBAL)
-		.set pg, pg+(PAGE_SIZE * 512)
-	.endr	
 
 .endr	

@@ -39,6 +39,11 @@ volatile inline uint64_t vmmcall1(uint64_t id)
     return ret;
 }
 
+inline void outw(uint16_t port, uint16_t val)
+{
+    asm volatile ( "outw %0, %1" : : "a"(val), "Nd"(port) );
+}
+
 inline void outb(uint16_t port, uint8_t val)
 {
     asm volatile ( "outb %0, %1" : : "a"(val), "Nd"(port) );
@@ -140,6 +145,11 @@ volatile static inline void cond_set(cond_t *c, uint64_t v)
 	wake_cpu = blog2(bm);
 	id = (~bm) & id;
 	//printf("wakking cpu %d\n", wake_cpu);
+	// if the cpu you are about to wake up
+	// is pre-empted, then that means it has not
+	// executed halt instructions yet. wait for it to
+	// execute it. 
+	vmmcall(KVM_HC_SCHED_YIELD, wake_cpu);
 	vmmcall(KVM_HC_KICK_CPU, 0, wake_cpu);
     }
 }
@@ -164,6 +174,7 @@ volatile static inline void mutex_unlock_hlt(mutex_t *m)
     if(id != 0) {
 	wake_cpu = blog2((id & (-id)));
 	//printf("waking cpu %d\n", wake_cpu);
+	vmmcall(KVM_HC_SCHED_YIELD, wake_cpu);
 	vmmcall(KVM_HC_KICK_CPU, 0, wake_cpu);
     }
 }

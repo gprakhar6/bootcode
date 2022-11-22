@@ -53,6 +53,7 @@ SECTIONS
   PAGE_DS_START = .;
   .paging ALIGN(PAGE_SIZE): { obj/src/boot.o(paging) }
   PAGE_DS_SIZE = . - PAGE_DS_START;
-  
+
+  KERN_END = .;
   /DISCARD/ : { *(.eh_frame .comment) }
 }
