@@ -169,13 +169,20 @@ __syscall_entry:
 	movq    %rdx, %rsp
 	movw    $PORT_MY_ID, %dx
 	xorq    %rax, %rax
-	inb     %dx, %al	
+	inw     %dx, %ax
+	andw    $0x00FF, %ax
 	movq    $kern_stack, %rdx // store power on value, in its own id
 	leaq    (%rdx, %rax, 8), %rax
 	movq    (%rax), %rdx
 	xchgq   %rdx, %rsp
 	movq    %rbp, %rax
 	movq    %rsp, %rbp
+	rdtscp
+	xchgq %rax, %r15
+	subq %rax, %r15
+	movw    $PORT_HLT, %dx
+	movb    $0, %al
+	out     %al, (%dx)	
 	jmp     syscall_entry
 	
 .globl user_trampoline, user_trampoline_sz
@@ -407,7 +414,9 @@ send_init_startup_to_all:
 */
 	
 long_mode:
-	// Set up the stack pointer and call into C.	
+	// Set up the stack pointer and call into C.
+	rdtscp
+	mov %rax, %r15
 	subq    $16, %rsp
 	movq    %r11, %rax
 	shlq    $8, %rax
@@ -561,6 +570,7 @@ no_err_code_sz = . - no_err_code
 
 .globl barrier_word, barrier_cond
 barrier_cond:
+	.quad 0	
 	.quad 0
 	.quad 0
 barrier_word:
@@ -660,3 +670,6 @@ boot_p4:
         .fill 508, 8, 0
 
 .endr	
+
+.globl kern_end	
+kern_end:

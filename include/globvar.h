@@ -17,6 +17,7 @@
 #define MSG_SENT_INIT_START             (1)
 #define MSG_BOOTED                      (2)
 
+#define TSC_TO_US_DIV                   (3400)
 
 extern const uint64_t code_start;
 extern const uint64_t code_size;

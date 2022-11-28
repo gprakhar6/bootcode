@@ -868,12 +868,12 @@ int printf_(const char* format, ...)
 {
   va_list va;
 
-  mutex_lock_busy_wait(&mutex_printf);
+  mutex_lock_hlt(&mutex_printf);
   va_start(va, format);
   char buffer[1];
   const int ret = _vsnprintf(_out_char, buffer, (size_t)-1, format, va);
   va_end(va);
-  mutex_unlock(&mutex_printf);
+  mutex_unlock_hlt(&mutex_printf);
   return ret;
 }
 

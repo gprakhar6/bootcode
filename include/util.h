@@ -8,6 +8,8 @@
 #include "kvm_para.h"
 #include "globvar.h"
 
+#define RETRY_COUNT (32)
+
 #define ATOMIC_INCQ(x) asm("lock\n incq (%0)\n" ::"r"(x))
 #define ATOMIC_DECQ(x) asm("lock\n decq (%0)\n" ::"r"(x))
 
@@ -95,6 +97,7 @@ volatile static inline uint8_t get_id()
     return (uint8_t)(rax & 0x00FF);
 }
 
+// use bsf instead or other bit search  instruction
 volatile static inline uint8_t blog2(uint64_t x)
 {
     uint8_t id = 0;
@@ -105,53 +108,58 @@ volatile static inline uint8_t blog2(uint64_t x)
 
 volatile static inline void cond_wait(cond_t *c, uint64_t v)
 {
-    uint64_t id;
-    asm volatile ("sfence");
-    if(c->c == v)
-	goto out;
-    else {
-	id = ((uint64_t)0x1 << get_id());
-    loop:
-	asm volatile ("lock\n"
-		      "orq %0, (%1)\n"
-		      "hlt": "+r"(id) : "r"(&c->waiting_cpus));
-	// TBD: is mfence required? or sfence sufficient
-	// we want c->c = v, to be completed before this statement
-	asm volatile ("sfence");
-	if(c->c == v) {
-	    // i got the lock, remove the waiting bit
-	    id = ~id;
-	    asm volatile ("lock\n"
-			  "andq %0, (%1)": "+r"(id) : "r"(&c->waiting_cpus));		    
-	}
-	else {
-	    goto loop;
-	}
-    }
+    uint64_t id, retry_count = RETRY_COUNT; // TBD Tuning
+    id = get_id();
+    asm volatile("lock bts %0, (%2)\n\t"
+		 "check_v%=: \n\t"
+		 "cmp 16(%2), %1\n\t"
+		 "je skip_hlt%=\n\t"
+		 "test %3, %3\n\t"
+		 "jz hlt_path%=\n\t"
+		 "decq %3\n\t"
+		 "jmp check_v%=\n\t"
+		 "hlt_path%=:\n\t"
+		 "lock bts %0, 8(%2)\n\t"
+		 "hlt\n\t"
+		 "jmp check_v%=\n\t"
+		 "skip_hlt%=: lock btr %0, 8(%2)\n\t"
+		 "lock btr %0, (%2)\n\t"
+		 :"+r"(id)
+		 :"r"(v), "r"(c), "r"(retry_count));
 
-out:
     return;
 }
 
 volatile static inline void cond_set(cond_t *c, uint64_t v)
 {
-    uint8_t wake_cpu;
-    uint64_t id, bm;
-    c->c = v;
-    id = c->waiting_cpus;
+    uint64_t waiting_cpu, rbx;
 
-    while(id != 0) {
-	bm = id & (-id);
-	wake_cpu = blog2(bm);
-	id = (~bm) & id;
-	//printf("wakking cpu %d\n", wake_cpu);
-	// if the cpu you are about to wake up
-	// is pre-empted, then that means it has not
-	// executed halt instructions yet. wait for it to
-	// execute it. 
-	vmmcall(KVM_HC_SCHED_YIELD, wake_cpu);
-	vmmcall(KVM_HC_KICK_CPU, 0, wake_cpu);
-    }
+    asm volatile ("movq %0, 16(%2)\n\t"
+		  // because bsf could cause load which
+		  // can be reordered bedore movq store
+		  "sfence\n\t"
+		  "check_scan_for_intent%=:\n\t"
+		  "bsf (%2), %1\n\t"
+		  "jz no_cpu_with_intent%=\n\t"
+		  "check_for_intent%=:\n\t"
+		  "bt %1, (%2)\n\t"
+		  "jnc check_scan_for_intent%=\n\t"
+		  "bt %1, 8(%2)\n\t"
+		  "jc yield_once_and_kick%=\n\t"
+		  "mov %1, %3\n\t"
+		  "mov $11, %0\n\t" // yield
+		  "vmmcall\n\t"
+		  "jmp check_for_intent%=\n\t"
+		  "yield_once_and_kick%=:\n\t"
+		  "mov %1, %3\n\t"		  
+		  "mov $11, %0\n\t" // yield
+		  "vmmcall\n\t"
+		  "mov $5, %0\n\t"  // kick
+		  "vmmcall\n\t"
+		  "jmp check_scan_for_intent%=\n\t"
+		  "no_cpu_with_intent%=:\n\t"
+		  :"+a"(v), "=c"(waiting_cpu)
+		  : "d"(c), "b"(rbx));
 }
 
 volatile static inline void mutex_init(mutex_t *m)
@@ -159,82 +167,61 @@ volatile static inline void mutex_init(mutex_t *m)
     asm volatile("movq $1, (%%rax)" :: "a"(&m->m));
 }
 
-volatile static inline void mutex_unlock(mutex_t *m)
-{
-    uint64_t rax = 1;
-    asm volatile("xchgq %0, (%1)\n":"+a"(rax):"r"(&m->m));
-}
-
 volatile static inline void mutex_unlock_hlt(mutex_t *m)
 {
-    uint64_t rax = 1, id;
-    uint8_t wake_cpu;
-    asm volatile("xchgq %0, (%1)\n":"+a"(rax):"r"(&m->m));
-    id = m->waiting_cpus;
-    if(id != 0) {
-	wake_cpu = blog2((id & (-id)));
-	//printf("waking cpu %d\n", wake_cpu);
-	vmmcall(KVM_HC_SCHED_YIELD, wake_cpu);
-	vmmcall(KVM_HC_KICK_CPU, 0, wake_cpu);
-    }
+    uint64_t rax = 1, waiting_cpu, rbx;
+
+    asm volatile ("lock xchgq %0, 16(%2)\n\t"
+		  "bsf (%2), %1\n\t"
+		  "jz no_cpu_with_intent%=\n\t"
+		  "check_for_intent%=:\n\t"
+		  "bt %1, (%2)\n\t"
+		  "jnc cpu_no_intent%=\n\t"
+		  "bt %1, 8(%2)\n\t"
+		  "jc yield_once_and_kick%=\n\t"
+		  "mov %1, %3\n\t"
+		  "mov $11, %0\n\t" // yield
+		  "vmmcall\n\t"
+		  "jmp check_for_intent%=\n\t"
+		  "yield_once_and_kick%=:\n\t"
+		  "mov %1, %3\n\t"
+		  "mov $11, %0\n\t" // yield
+		  "vmmcall\n\t"
+		  "mov $5, %0\n\t"  // kick
+		  "vmmcall\n\t"	 
+		  "cpu_no_intent%=:\n\t"
+		  "no_cpu_with_intent%=:\n\t"
+		  :"+a"(rax), "=c"(waiting_cpu)
+		  : "r"(m), "b"(rbx));
 }
 
 volatile static inline void mutex_lock_hlt(mutex_t *m)
 {
-    uint64_t rax = 0;
-    uint64_t id;
+    uint64_t rax, rbx = 0;
+    uint64_t id, retry_count = RETRY_COUNT; // TBD Tuning
 
-    asm volatile("xchgq %0, (%1)\n":"+a"(rax):"r"(&m->m));
-    if(rax == 0) {
-	id = ((uint64_t)0x1 << get_id());
-	asm volatile ("lock\n"
-		      "orq %0, (%1)\n"
-		      "hlt": "+r"(id) : "r"(&m->waiting_cpus));
-    }
-    else
-	goto out;
-
-loop:
-    asm volatile("xchgq %0, (%1)\n":"+a"(rax):"r"(&m->m));
-    if(rax == 0) {
-	// this case shouldnt happen
-	goto loop;
-    }
-    else {
-	// i got the lock, remove the waiting bit
-	id = ~id;
-	asm volatile ("lock\n"
-		      "andq %0, (%1)": "+r"(id) : "r"(&m->waiting_cpus));	
-    }
-out:
+    id = get_id();
+    asm volatile("lock bts %0, (%2)\n\t"
+		 "try_lock%=: \n\t"
+		 "movq $1, %1\n\t"
+		 "lock cmpxchgq %4, 16(%2)\n\t"
+		 "jz skip_hlt%=\n\t"
+		 "test %3, %3\n\t"
+		 "jz hlt_path%=\n\t"
+		 "decq %3\n\t"
+		 "jmp try_lock%=\n\t"
+		 "hlt_path%=:\n\t"
+		 "lock bts %0, 8(%2)\n\t"
+		 "hlt\n\t"
+		 "jmp try_lock%=\n\t"
+		 "skip_hlt%=: lock btr %0, 8(%2)\n\t"
+		 "lock btr %0, (%2)\n\t"
+		 :"+r"(id)
+		 :"a"(rax), "r"(m), "r"(retry_count), "b"(rbx));
+    
     return;
 }
 
-volatile static inline void mutex_lock_busy_wait(mutex_t *m)
-{
-    uint64_t rax = 0;
-    uint64_t id;
-    id = ((uint64_t)0x1 << get_id());
-    while(rax == 0) {
-	//asm volatile("movq %0, %%r15"::"r"(m->m));
-	//outb(PORT_HLT, 0);
-	asm volatile("xchgq %0, (%1)":"+a"(rax):"r"(&m->m));
-	/*
-	if(rax != 0)
-	    asm("hlt\n");
-	*/
-    }
-    //asm volatile("orq %0, (%1)" :"+r"(id):"r"(&m->waiting_cpus));
-	
-}
-
-// successful returns 1 else 0
-volatile static inline uint64_t mutex_lock(mutex_t *m)
-{
-    uint64_t rax = 0;
-    asm volatile("xchgq %0, (%1)\n":"+a"(rax):"r"(&m->m));
-    return rax;
-}
 
 static inline void io_wait(void)
 {
@@ -244,15 +231,19 @@ static inline void io_wait(void)
 static inline void barrier()
 {
     uint8_t ncpus = get_pool_sz();
+    uint8_t id = get_id();
     cond_wait(barrier_cond, 0);
 
     ATOMIC_INCQ(barrier_word);
     if(*barrier_word == ncpus) {
+	//printf("set called %d\n", id);
 	cond_set(barrier_cond, 1);
     }
     else {
+	//printf("cond_wait :%d\n", id);
 	cond_wait(barrier_cond, 1);
     }
+    //printf("%d: c->intent_cpus %lX\n", id, ((cond_t *)barrier_cond)->intent_cpus);
     ATOMIC_DECQ(barrier_word);
     if(*barrier_word == 0)
 	cond_set(barrier_cond, 0);

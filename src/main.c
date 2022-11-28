@@ -85,27 +85,29 @@ int main()
     uint16_t my_id_pool_sz;
     int i;
     uint64_t *addr = (uint64_t *)0x0008;
+    uint64_t t2, t1;
     my_id_pool_sz = get_pool_and_id();
     my_id = my_id_pool_sz & 0xFF;
     pool_sz = (uint8_t)((my_id_pool_sz & 0xFF00) >> 8);
-    //mutex_init(&mutex_printf);
     //printf("Calling init boot\n");
+    //t1 = tsc();
     init_boot(my_id, pool_sz);
+    //t2 = tsc();
+    //printf("dt = %d\n", (t2 - t1) / TSC_TO_US_DIV);
     //asm("sti");
-    //printf("Barrier waiting %d\n", get_id());
+    printf("Barrier waiting %d\n", get_id());
     barrier();
-    //printf("Barier in %d\n", my_id);
-    if(my_id != 0) {
-	//printf("halting\ %d\n", my_id);
-	asm("hlt");
-    }
-    else
-	outw(PORT_MSG, MSG_BOOTED);
-
-    for(i = 0; i < 3; i++)
-    {
-	printf("%lX\n", addr[i]);
-    }
+    printf("Barier in %d\n", my_id);
+    outb(PORT_HLT, 0);
+    /*
+    asm("	rdtscp\n"
+	"xchgq %rax, %r15\n"
+	"subq %rax, %r15\n"
+	"movw    $0x3fa, %dx\n"
+	"movb    $0, %al\n"
+	"out     %al, (%dx)\n");
+    */
+    scheduler();
     while(1);
 #if 0    
     //pde = addr_to_pde((void *)boot_p4, 0x200000, (uint64_t **)pe);
@@ -126,7 +128,6 @@ void fill_tss(struct tss_entry_t *tss, struct sys_desc_t *tss_desc,
 	      uint64_t stack_addr)
 {
     int sz;
-
     // fill tss table
     memset(tss, 0, sizeof(*tss));
     // need to see its correctness
@@ -232,8 +233,8 @@ void set_syscall_msrs()
     set_msr(MSR_SFMASK, 0, 0);
 }
 
-static mutex_t mutex_bss_load = {0,1};
-static mutex_t mutex_tss_fill_flush = {0,1};
+static mutex_t mutex_bss_load = {0,0,1};
+static mutex_t mutex_tss_fill_flush = {0,0,1};
 void init_boot(uint8_t my_id, uint8_t pool_sz)
 {
     int i;
@@ -245,7 +246,6 @@ void init_boot(uint8_t my_id, uint8_t pool_sz)
     //printf("my id = %d, pool_sz = %d\n", my_id, pool_sz);
     // zero out the bss section
     mutex_lock_hlt(&mutex_bss_load);
-    //mutex_lock_pause(&mutex_bss_load);
     memset((void *)bss_start, 0, bss_size);
     mutex_unlock_hlt(&mutex_bss_load);
     //printf("Filling TSS\n");

@@ -78,11 +78,13 @@ struct __attribute__((packed)) sys_desc_t {
 };
 
 typedef struct __attribute__((packed)) {
+    uint64_t intent_cpus;
     uint64_t waiting_cpus;
     uint64_t c; 
 } cond_t; // conditional
 
 typedef struct __attribute__((packed)) {
+    uint64_t intent_cpus;
     uint64_t waiting_cpus;
     uint64_t m; 
 } mutex_t;
@@ -127,4 +129,13 @@ struct __attribute__((packed))apic_t {
     uint32_t icrh;
     uint8_t reserved12[12];    
 };
+
+struct t_page_table {
+    uint64_t e[512];
+};
+
+struct t_pg_tbls {
+    struct t_page_table tbl[2];
+};
+
 #endif
