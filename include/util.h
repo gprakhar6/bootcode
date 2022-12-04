@@ -12,13 +12,14 @@
 
 #define ATOMIC_INCQ(x) asm("lock\n incq (%0)\n" ::"r"(x))
 #define ATOMIC_DECQ(x) asm("lock\n decq (%0)\n" ::"r"(x))
-
-extern uint64_t barrier_word[], barrier_cond[];
+#define ARR_SZ_1D(x) (sizeof(x)/sizeof(x[0]))
 
 #define GET_VMMCALL_NAME(_1,_2,_3,_4, NAME, ...) NAME
 // upto 4 arguments rbx, rcx, rdx, and rsi
 // rax has system call and return
 #define vmmcall(...) GET_VMMCALL_NAME(__VA_ARGS__,vmmcall4,vmmcall3,vmmcall2,vmmcall1)(__VA_ARGS__)
+
+extern uint64_t barrier_word[], barrier_cond[];
 
 volatile inline uint64_t vmmcall3(uint64_t id, uint64_t rbx, uint64_t rcx)
 {
@@ -165,6 +166,8 @@ volatile static inline void cond_set(cond_t *c, uint64_t v)
 volatile static inline void mutex_init(mutex_t *m)
 {
     asm volatile("movq $1, (%%rax)" :: "a"(&m->m));
+    m->intent_cpus = 0;
+    m->waiting_cpus = 0;
 }
 
 volatile static inline void mutex_unlock_hlt(mutex_t *m)

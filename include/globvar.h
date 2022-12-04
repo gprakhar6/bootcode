@@ -12,8 +12,8 @@
 #define PORT_MY_ID                      (0x3fc)  // 0x3fd
 #define PORT_MSG                        (0x3fe) // and 3ff
 
-#define MAX_CPUS                        (256)
-
+#define MAX_CPUS                        (64)
+#define MAX_FUNC                        (256)
 #define MSG_SENT_INIT_START             (1)
 #define MSG_BOOTED                      (2)
 

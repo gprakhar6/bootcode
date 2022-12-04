@@ -98,7 +98,7 @@ int main()
     printf("Barrier waiting %d\n", get_id());
     barrier();
     printf("Barier in %d\n", my_id);
-    outb(PORT_HLT, 0);
+    //outb(PORT_HLT, 0);
     /*
     asm("	rdtscp\n"
 	"xchgq %rax, %r15\n"
@@ -107,6 +107,14 @@ int main()
 	"movb    $0, %al\n"
 	"out     %al, (%dx)\n");
     */
+    if(my_id != 0) {
+	asm("hlt");
+    }
+    else {
+	scheduler_init();
+	outw(PORT_MSG, MSG_BOOTED);
+    }
+    
     scheduler();
     while(1);
 #if 0    

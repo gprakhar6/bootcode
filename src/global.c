@@ -26,6 +26,7 @@
 
 */
 #include "globvar.h"
+#include "hw_types.h"
 
 extern char CODE_START[], CODE_SIZE[];
 extern char LAYOUT_START[], LAYOUT_SIZE[];
