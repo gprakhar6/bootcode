@@ -12,6 +12,7 @@
 
 #define ATOMIC_INCQ(x) asm("lock\n incq (%0)\n" ::"r"(x))
 #define ATOMIC_DECQ(x) asm("lock\n decq (%0)\n" ::"r"(x))
+
 #define ARR_SZ_1D(x) (sizeof(x)/sizeof(x[0]))
 
 #define GET_VMMCALL_NAME(_1,_2,_3,_4, NAME, ...) NAME
