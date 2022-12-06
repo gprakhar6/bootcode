@@ -18,6 +18,9 @@ typedef struct {
 #define decl_queue_init(x) void CONCAT(queue_init_, x)(t_queue *q, x *h, int tsz)
 #define decl_queue_push(x) int CONCAT(queue_push_, x)(t_queue *q, x *e)
 #define decl_queue_pop(x) int CONCAT(queue_pop_, x)(t_queue *q, x *e)
+static inline int queue_size(t_queue *q) {	
+    return q->n;						       
+}
 
 #define decl_queue_funcs(x)			\
     decl_queue_init(x);				\
@@ -37,5 +40,6 @@ decl_queue_funcs(uint8_t);
 #define queue_pop(q, e) _Generic((e),			\
 				 uint8_t* : queue_pop_uint8_t,	\
 				 default : 0)(q, e)
+
 
 #endif

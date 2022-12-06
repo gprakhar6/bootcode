@@ -253,6 +253,27 @@ static inline void barrier()
 	cond_set(barrier_cond, 0);
 }
 
+static inline void set_bit(uint64_t *r, uint64_t bn)
+{
+    asm volatile("bts %1, (%0)\n\t" :: "r"(r), "r"(bn));
+}
+
+static inline void reset_bit(uint64_t *r, uint64_t bn)
+{
+    asm volatile("btr %1, (%0)\n\t" :: "r"(r), "r"(bn));
+}
+
+static inline int64_t lowest_set_bit(uint64_t *r)
+{
+    int64_t rax;
+    asm volatile("bsf (%1), %0\n\t"
+		 "jnz a_set_bit%=\n\t"
+		 "mov $-1, %0\n\t"
+		 "a_set_bit%=:\n\t": "=a"(rax) : "r"(r));
+    return rax;
+}
+
+
 extern uint64_t tsc(); // defined in boot.S
 void *memset(void *s, int c, size_t n);
 void *memcpy (void *dest, void *src, register size_t len);

@@ -47,7 +47,7 @@
 #define define_queue_funcs(x)			\
     define_queue_init(x);			\
     define_queue_push(x);			\
-    define_queue_pop(x);
+    define_queue_pop(x);			\
 
 
 define_queue_funcs(uint8_t);
