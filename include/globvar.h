@@ -14,8 +14,11 @@
 
 #define MAX_CPUS                        (64)
 #define MAX_FUNC                        (256)
+#define NULL_FUNC                       (255)
+
 #define MSG_SENT_INIT_START             (1)
 #define MSG_BOOTED                      (2)
+#define MSG_WAITING_FOR_WORK            (3)
 
 #define TSC_TO_US_DIV                   (3400)
 

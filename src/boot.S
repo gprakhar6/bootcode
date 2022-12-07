@@ -177,12 +177,14 @@ __syscall_entry:
 	xchgq   %rdx, %rsp
 	movq    %rbp, %rax
 	movq    %rsp, %rbp
+	/*
 	rdtscp
 	xchgq %rax, %r15
 	subq %rax, %r15
 	movw    $PORT_HLT, %dx
 	movb    $0, %al
-	out     %al, (%dx)	
+	out     %al, (%dx)
+	*/
 	jmp     syscall_entry
 	
 .globl user_trampoline, user_trampoline_sz

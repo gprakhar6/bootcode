@@ -107,15 +107,24 @@ int main()
 	"movb    $0, %al\n"
 	"out     %al, (%dx)\n");
     */
+
+    //scheduler_init(pool_sz);
+    //outw(PORT_MSG, MSG_BOOTED);
+    
     if(my_id != 0) {
-	asm("hlt");
+	printf("halting %d\n", my_id);
+	asm volatile("hlt");
+	inc_active_cpu();
+	printf("Woke %d\n", my_id);
     }
     else {
-	scheduler_init();
+	scheduler_init(pool_sz);
 	outw(PORT_MSG, MSG_BOOTED);
     }
     
     scheduler();
+    
+    printf("cpu %d: No return here\n", my_id);
     while(1);
 #if 0    
     //pde = addr_to_pde((void *)boot_p4, 0x200000, (uint64_t **)pe);

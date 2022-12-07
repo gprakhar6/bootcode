@@ -43,6 +43,36 @@ volatile inline uint64_t vmmcall1(uint64_t id)
     return ret;
 }
 
+volatile inline void reload_cr3()
+{
+    uint64_t rax = 0;
+    asm volatile ("movq %%cr3, %0\n\t"
+		  "movq %0, %%cr3" ::"a"(rax));
+}
+
+static inline void set_bit(uint64_t *r, uint64_t bn)
+{
+    asm volatile("lock bts %1, (%0)\n\t" :: "r"(r), "r"(bn));
+}
+
+// compiler for some reason, unable to see that this
+// instruction modifies the *r location and does useless
+// optimization
+static inline void reset_bit(uint64_t *r, uint64_t bn)
+{
+    asm volatile("lock btr %1, (%0)\n\t" :: "r"(r), "r"(bn));
+}
+
+static inline int64_t lowest_set_bit(uint64_t *r)
+{
+    int64_t rax;
+    asm volatile("bsf (%1), %0\n\t"
+		 "jnz a_set_bit%=\n\t"
+		 "mov $-1, %0\n\t"
+		 "a_set_bit%=:\n\t": "=a"(rax) : "r"(r));
+    return rax;
+}
+
 inline void outw(uint16_t port, uint16_t val)
 {
     asm volatile ( "outw %0, %1" : : "a"(val), "Nd"(port) );
@@ -123,9 +153,9 @@ volatile static inline void cond_wait(cond_t *c, uint64_t v)
 		 "hlt_path%=:\n\t"
 		 "lock bts %0, 8(%2)\n\t"
 		 "hlt\n\t"
+		 "lock btr %0, 8(%2)\n\t"
 		 "jmp check_v%=\n\t"
-		 "skip_hlt%=: lock btr %0, 8(%2)\n\t"
-		 "lock btr %0, (%2)\n\t"
+		 "skip_hlt%=: lock btr %0, (%2)\n\t"
 		 :"+r"(id)
 		 :"r"(v), "r"(c), "r"(retry_count));
 
@@ -134,34 +164,56 @@ volatile static inline void cond_wait(cond_t *c, uint64_t v)
 
 volatile static inline void cond_set(cond_t *c, uint64_t v)
 {
-    uint64_t waiting_cpu, rbx;
-
+    uint64_t waiting_cpus, rbx, s = 0, intent_waiting;
+    int64_t preempted_cpu, hlt_cpu;
+    c->c = v;
+    asm volatile ("sfence");
+    while(c->intent_cpus != c->waiting_cpus) {
+	intent_waiting = c->intent_cpus ^ c->waiting_cpus;
+	preempted_cpu = lowest_set_bit(&intent_waiting);
+	if(preempted_cpu != -1)
+	    vmmcall(KVM_HC_SCHED_YIELD, preempted_cpu);
+	asm volatile ("sfence");
+    }
+    waiting_cpus = c->waiting_cpus;
+    while(waiting_cpus != 0) {
+	hlt_cpu = lowest_set_bit(&waiting_cpus);
+	if(hlt_cpu != -1)
+	    vmmcall(KVM_HC_KICK_CPU, 0, hlt_cpu);
+	reset_bit(&waiting_cpus, hlt_cpu);
+    }
+    
+    /*
     asm volatile ("movq %0, 16(%2)\n\t"
 		  // because bsf could cause load which
-		  // can be reordered bedore movq store
-		  "sfence\n\t"
+		  // can be reordered before movq store		  
 		  "check_scan_for_intent%=:\n\t"
+		  "sfence\n\t"		  
 		  "bsf (%2), %1\n\t"
+		  "movq %1, %4\n\t"
 		  "jz no_cpu_with_intent%=\n\t"
 		  "check_for_intent%=:\n\t"
 		  "bt %1, (%2)\n\t"
 		  "jnc check_scan_for_intent%=\n\t"
 		  "bt %1, 8(%2)\n\t"
 		  "jc yield_once_and_kick%=\n\t"
-		  "mov %1, %3\n\t"
+		  "mov %4, %3\n\t"
 		  "mov $11, %0\n\t" // yield
 		  "vmmcall\n\t"
 		  "jmp check_for_intent%=\n\t"
 		  "yield_once_and_kick%=:\n\t"
-		  "mov %1, %3\n\t"		  
+		  "mov %4, %3\n\t"
 		  "mov $11, %0\n\t" // yield
 		  "vmmcall\n\t"
+		  "movq %4, %1\n\t"
+		  "xorq %3, %3\n\t"
 		  "mov $5, %0\n\t"  // kick
 		  "vmmcall\n\t"
 		  "jmp check_scan_for_intent%=\n\t"
 		  "no_cpu_with_intent%=:\n\t"
 		  :"+a"(v), "=c"(waiting_cpu)
-		  : "d"(c), "b"(rbx));
+		  : "d"(c), "b"(rbx), "r"(s));
+    */
 }
 
 volatile static inline void mutex_init(mutex_t *m)
@@ -197,6 +249,7 @@ volatile static inline void mutex_unlock_hlt(mutex_t *m)
 		  "no_cpu_with_intent%=:\n\t"
 		  :"+a"(rax), "=c"(waiting_cpu)
 		  : "r"(m), "b"(rbx));
+    // TBD rbx is clobber register to remove warning
 }
 
 volatile static inline void mutex_lock_hlt(mutex_t *m)
@@ -240,40 +293,21 @@ static inline void barrier()
 
     ATOMIC_INCQ(barrier_word);
     if(*barrier_word == ncpus) {
-	//printf("set called %d\n", id);
+	//printf("%d: c->intent_cpus %lX, waiting_cpus = %lX\n", id, ((cond_t *)barrier_cond)->intent_cpus, ((cond_t *)barrier_cond)->waiting_cpus);	
 	cond_set(barrier_cond, 1);
+	printf("kick_everyone\n");
+	//printf("%d: c->intent_cpus %lX, waiting_cpus = %lX\n", id, ((cond_t *)barrier_cond)->intent_cpus, ((cond_t *)barrier_cond)->waiting_cpus);	
     }
     else {
 	//printf("cond_wait :%d\n", id);
 	cond_wait(barrier_cond, 1);
     }
-    //printf("%d: c->intent_cpus %lX\n", id, ((cond_t *)barrier_cond)->intent_cpus);
     ATOMIC_DECQ(barrier_word);
-    if(*barrier_word == 0)
+    if(*barrier_word == 0) {
+	//printf("%d lset\n", id);
 	cond_set(barrier_cond, 0);
+    }
 }
-
-static inline void set_bit(uint64_t *r, uint64_t bn)
-{
-    asm volatile("bts %1, (%0)\n\t" :: "r"(r), "r"(bn));
-}
-
-static inline void reset_bit(uint64_t *r, uint64_t bn)
-{
-    asm volatile("btr %1, (%0)\n\t" :: "r"(r), "r"(bn));
-}
-
-static inline int64_t lowest_set_bit(uint64_t *r)
-{
-    int64_t rax;
-    asm volatile("bsf (%1), %0\n\t"
-		 "jnz a_set_bit%=\n\t"
-		 "mov $-1, %0\n\t"
-		 "a_set_bit%=:\n\t": "=a"(rax) : "r"(r));
-    return rax;
-}
-
-
 extern uint64_t tsc(); // defined in boot.S
 void *memset(void *s, int c, size_t n);
 void *memcpy (void *dest, void *src, register size_t len);
