@@ -73,17 +73,17 @@ void process_sched_dag(uint8_t id, uint8_t fn)
     uint8_t num_nodes, s, e, i;
     uint8_t out_fn;
 
-    printf("cpu %d:processing dag\n", id);
+    //printf("cpu %d:processing dag\n", id);
     num_nodes = metadata->num_nodes;
     s = metadata->dag[num_nodes + fn] + 2 * num_nodes + 1;
     e = metadata->dag[num_nodes + fn + 1] + 2 * num_nodes + 1;
     //printf("num_nodes = %d, s = %d, e = %d, %d\n", num_nodes, s, e, metadata->dag[num_nodes + fn]);
     for(i = s; i < e; i++) {
 	out_fn = metadata->dag[i];
-	printf("out_fn = %d\n", out_fn);
-	asm volatile("lock decb (%0)\n\t":: "r"(&(metadata->dag[out_fn])));
-	if(metadata->dag[out_fn] == 0) {
-	    printf("cpu: pushing %d\n", out_fn);
+	//printf("out_fn = %d\n", out_fn);
+	asm volatile("lock decb (%0)\n\t":: "r"(&(metadata->dag_in_count[out_fn])));
+	if(metadata->dag_in_count[out_fn] == 0) {
+	    //printf("cpu: pushing %d\n", out_fn);
 	    queue_push(&work_q, &out_fn);
 	}
     }
@@ -98,7 +98,7 @@ void scheduler()
     id64 = (uint64_t)id;
 
 start:
-    printf("current[%d] = %d\n", id, metadata->current[id]);
+    //printf("current[%d] = %d\n", id, metadata->current[id]);
     if(metadata->current[id] != NULL_FUNC) { // previous invoc execed a fn
 	process_sched_dag(id, metadata->current[id]);
 	metadata->current[id] = NULL_FUNC;
@@ -119,7 +119,7 @@ start:
 		    // if prempted before hlt, give it a chance to
 		    // hlt. Maybe can be remove TBD
 		    //vmmcall(KVM_HC_SCHED_YIELD, hlt_cpu_id);
-		    printf("waking %d\n", hlt_cpu_id);
+		    //printf("waking %d\n", hlt_cpu_id);
 		    vmmcall(KVM_HC_KICK_CPU, 0, hlt_cpu_id);
 		} else
 		    break; // no more cpus to wake
@@ -135,17 +135,20 @@ start:
 	if((extra_work == 0) && (metadata->num_active_cpus == 1)) {
 	    // you are the last guy, dont halt
 	    mutex_unlock_hlt(&mutex_sched_hlt_path);
-	    printf("cpu %d:All work is finished\n", id);
+	    //printf("cpu %d:All work is finished\n", id);
 	    outw(PORT_MSG, MSG_WAITING_FOR_WORK);
+	    // copy in count for the dag, it will be modified
+	    memcpy(metadata->dag_in_count, metadata->dag, sizeof(metadata->dag_in_count));
 	    // executed by single guy
-	    printf("cpu %d: pushing\n", id);
+	    //printf("cpu %d: pushing\n", id);
 	    queue_push(&work_q, &(metadata->start_func));
 	}
 	else {
+	    ATOMIC_DECQ(&(metadata->num_active_cpus));
 	    mutex_unlock_hlt(&mutex_sched_hlt_path);
-	    printf("cpu %d: halting\n", id);
-	    asm volatile ("lock decq (%0)\n\t"
-			  "lock bts %2, (%1)\n\t"
+	    
+	    //printf("cpu %d: halting,extra_work=%d,active_cpu=%d\n", id, extra_work,metadata->num_active_cpus);
+	    asm volatile ("lock bts %2, (%1)\n\t"
 			  "hlt\n\t"
 			  "lock btr %2, (%1)\n\t"
 			  "lock incq (%0)\n\t":

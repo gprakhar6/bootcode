@@ -95,9 +95,9 @@ int main()
     //t2 = tsc();
     //printf("dt = %d\n", (t2 - t1) / TSC_TO_US_DIV);
     //asm("sti");
-    printf("Barrier waiting %d\n", get_id());
+    //printf("Barrier waiting %d\n", get_id());
     barrier();
-    printf("Barier in %d\n", my_id);
+    //printf("Barier in %d\n", my_id);
     //outb(PORT_HLT, 0);
     /*
     asm("	rdtscp\n"
@@ -112,10 +112,10 @@ int main()
     //outw(PORT_MSG, MSG_BOOTED);
     
     if(my_id != 0) {
-	printf("halting %d\n", my_id);
+	//printf("halting %d\n", my_id);
 	asm volatile("hlt");
 	inc_active_cpu();
-	printf("Woke %d\n", my_id);
+	//printf("Woke %d\n", my_id);
     }
     else {
 	scheduler_init(pool_sz);

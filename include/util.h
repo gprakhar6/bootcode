@@ -295,7 +295,7 @@ static inline void barrier()
     if(*barrier_word == ncpus) {
 	//printf("%d: c->intent_cpus %lX, waiting_cpus = %lX\n", id, ((cond_t *)barrier_cond)->intent_cpus, ((cond_t *)barrier_cond)->waiting_cpus);	
 	cond_set(barrier_cond, 1);
-	printf("kick_everyone\n");
+	//printf("kick_everyone\n");
 	//printf("%d: c->intent_cpus %lX, waiting_cpus = %lX\n", id, ((cond_t *)barrier_cond)->intent_cpus, ((cond_t *)barrier_cond)->waiting_cpus);	
     }
     else {
