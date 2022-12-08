@@ -209,6 +209,7 @@ jump_usermode:
 	movq $(0x18 | 3), %rax // user code segment
 	pushq %rax
 	pushq %rdi // RIP
+	movq %rdx, %rdi // input arg
 	iretq
 	hlt
 .globl reload_gdt

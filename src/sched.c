@@ -14,7 +14,7 @@ extern char boot_p4[], kern_end[];
 struct t_pg_tbls *pg_tbls = (struct t_pg_tbls *)boot_p4;
 struct t_metadata *metadata = (struct t_metadata *)0x0008;
 
-extern void jump_usermode(void *rip, void *stack);
+extern void jump_usermode(void *rip, void *stack, void *arg);
 
 t_queue work_q;
 uint8_t work_q_arr[WORK_Q_ARR_SZ];
@@ -61,9 +61,10 @@ page_table = %lX\n",
 
     //ins = metadata->func_info[fn].entry_addr;
     //hexdump(metadata->func_info[fn].pt_addr, 32);
-    //hexdump(ins, 32);
+    //hexdump(ins, 32);    
     jump_usermode(metadata->func_info[fn].entry_addr,
-		  metadata->func_info[fn].stack_load_addr);    
+		  metadata->func_info[fn].stack_load_addr,
+		  (void *)(0x80000000));
 }
 
 void process_sched_dag(uint8_t id, uint8_t fn)
