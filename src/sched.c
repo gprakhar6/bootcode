@@ -3,7 +3,7 @@
 #include "printf.h"
 #include "util.h"
 #include "sched.h"
-#include "queue.h"
+#include "stack.h"
 
 #include "../../kvm-start/runtime_if.h" // TBD
 
@@ -16,12 +16,12 @@ struct t_metadata *metadata = (struct t_metadata *)0x0008;
 
 extern void jump_usermode(void *rip, void *stack, void *arg);
 
-t_queue work_q;
+t_stack work_q;
 uint8_t work_q_arr[WORK_Q_ARR_SZ];
 mutex_t mutex_sched_hlt_path;
 void scheduler_init(uint8_t pool_sz)
 {
-    queue_init(&work_q, work_q_arr, ARR_SZ_1D(work_q_arr));
+    stack_init(&work_q, work_q_arr, ARR_SZ_1D(work_q_arr));
     metadata->bit_map_inactive_cpus = ~0;
     reset_bit(&(metadata->bit_map_inactive_cpus), 0);
     metadata->num_active_cpus = 1;
@@ -35,10 +35,10 @@ static uint8_t get_work(uint8_t *fn)
 {
     uint8_t extra_work;
 
-    if(queue_pop(&work_q, fn) == -1) {
+    if(stack_pop(&work_q, fn) == -1) {
 	*fn = NULL_FUNC;
     }
-    extra_work = queue_size(&work_q);
+    extra_work = stack_current_size(&work_q);
     return extra_work;
 }
 
@@ -85,7 +85,7 @@ void process_sched_dag(uint8_t id, uint8_t fn)
 	asm volatile("lock decb (%0)\n\t":: "r"(&(metadata->dag_in_count[out_fn])));
 	if(metadata->dag_in_count[out_fn] == 0) {
 	    //printf("cpu: pushing %d\n", out_fn);
-	    queue_push(&work_q, &out_fn);
+	    stack_push(&work_q, &out_fn);
 	}
     }
 }
@@ -142,7 +142,7 @@ start:
 	    memcpy(metadata->dag_in_count, metadata->dag, sizeof(metadata->dag_in_count));
 	    // executed by single guy
 	    //printf("cpu %d: pushing\n", id);
-	    queue_push(&work_q, &(metadata->start_func));
+	    stack_push(&work_q, &(metadata->start_func));
 	}
 	else {
 	    ATOMIC_DECQ(&(metadata->num_active_cpus));

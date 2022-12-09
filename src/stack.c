@@ -2,9 +2,9 @@
 #include <stddef.h>
 #include "printf.h"
 #include "util.h"
-#include "queue.h"
+#include "stack.h"
 
-#define define_queue_init(x) void CONCAT(queue_init_, x)(t_queue *q, x *h, int tsz) { \
+#define define_stack_init(x) void CONCAT(stack_init_, x)(t_stack *q, x *h, int tsz) { \
 	q->arr = (void *)h;						\
 	q->head = (void *)h;						\
 	q->n = 0;							\
@@ -12,7 +12,7 @@
 	q->tsz = tsz;							\
     }
 
-#define define_queue_push(x) int CONCAT(queue_push_, x)(t_queue *q, x *e) { \
+#define define_stack_push(x) int CONCAT(stack_push_, x)(t_stack *q, x *e) { \
 	int ret;							\
 	mutex_lock_hlt(&(q->m)); 					\
 	if(q->n < q->tsz) {						\
@@ -28,7 +28,7 @@
     }
 
 
-#define define_queue_pop(x) int CONCAT(queue_pop_, x)(t_queue *q, x *e) { \
+#define define_stack_pop(x) int CONCAT(stack_pop_, x)(t_stack *q, x *e) { \
 	int ret;							\
 	mutex_lock_hlt(&(q->m)); 					\
 	if(q->n > 0) {							\
@@ -44,10 +44,10 @@
     }
 
 
-#define define_queue_funcs(x)			\
-    define_queue_init(x);			\
-    define_queue_push(x);			\
-    define_queue_pop(x);			\
+#define define_stack_funcs(x)			\
+    define_stack_init(x);			\
+    define_stack_push(x);			\
+    define_stack_pop(x);			\
 
 
-define_queue_funcs(uint8_t);
+define_stack_funcs(uint8_t);
