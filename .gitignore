@@ -6,6 +6,7 @@
 *#
 .#*
 main
+func_mm_gen
 bkup/*
 obj/*
 bin/*

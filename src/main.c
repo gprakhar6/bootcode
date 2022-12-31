@@ -115,13 +115,13 @@ int main()
 	//printf("halting %d\n", my_id);
 	asm volatile("hlt");
 	inc_active_cpu();
-	//printf("Woke %d\n", my_id);
+	printf("Woke %d\n", my_id);
     }
     else {
 	scheduler_init(pool_sz);
 	outw(PORT_MSG, MSG_BOOTED);
     }
-    
+
     scheduler();
     
     printf("cpu %d: No return here\n", my_id);

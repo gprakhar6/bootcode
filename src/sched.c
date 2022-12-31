@@ -24,12 +24,15 @@ void scheduler_init(uint8_t pool_sz)
     stack_init(&work_q, work_q_arr, ARR_SZ_1D(work_q_arr));
     metadata->bit_map_inactive_cpus = ~0;
     reset_bit(&(metadata->bit_map_inactive_cpus), 0);
+    //printf("bm: %lX\n", metadata->bit_map_inactive_cpus);
     metadata->num_active_cpus = 1;
     mutex_init(&mutex_sched_hlt_path);
 }
 
 void inc_active_cpu() {
-    ATOMIC_INCQ(&metadata->num_active_cpus);
+    //printf("b:inc_active_cpu = %d\n", metadata->num_active_cpus);
+    ATOMIC_INCQ(&(metadata->num_active_cpus));
+    //printf("a:inc_active_cpu = %d\n", metadata->num_active_cpus);
 }
 static uint8_t get_work(uint8_t *fn)
 {
@@ -51,17 +54,19 @@ static void jump2fn(uint8_t id, uint8_t fn)
     //hexdump(metadata->func_info[fn].pt_addr, 32);
     pg_tbls[id].tbl[1].e[2] = metadata->func_info[fn].pt_addr | 0x07;
     reload_cr3();
+
     /*
     printf("Jumping to address = %lX\n stack_addr = %lX	\
 page_table = %lX\n",
 	   metadata->func_info[fn].entry_addr,
 	   metadata->func_info[fn].stack_load_addr,
 	   pg_tbls[id].tbl[1].e[2]);
-    */
+    
 
-    //ins = metadata->func_info[fn].entry_addr;
-    //hexdump(metadata->func_info[fn].pt_addr, 32);
-    //hexdump(ins, 32);    
+    ins = metadata->func_info[fn].entry_addr;
+    hexdump(metadata->func_info[fn].pt_addr, 32);
+    hexdump(ins, 32);    
+    */
     jump_usermode(metadata->func_info[fn].entry_addr,
 		  metadata->func_info[fn].stack_load_addr,
 		  (void *)(0x80000000));
@@ -90,7 +95,7 @@ void process_sched_dag(uint8_t id, uint8_t fn)
     }
 }
 
-void scheduler()
+volatile void scheduler()
 {
     uint8_t id, fn, extra_work;
     uint64_t id64, bm_inactive_cpus;
@@ -100,16 +105,23 @@ void scheduler()
 
 start:
     //printf("current[%d] = %d\n", id, metadata->current[id]);
+    //printf("id: %d, tsc: %d\n", id, tsc() / 1000);
     if(metadata->current[id] != NULL_FUNC) { // previous invoc execed a fn
+	//printf("id: %d, tsc: %d\n", id, tsc() / 1000);
 	process_sched_dag(id, metadata->current[id]);
 	metadata->current[id] = NULL_FUNC;
     }
+
+    mutex_lock_hlt(&mutex_sched_hlt_path);
     extra_work = get_work(&fn);
     //printf("cpu %d: extra_work = %d, fn = %d\n", id, extra_work, fn);
     if(fn != NULL_FUNC) { // there is a work to do
 	//printf("active_cpus = %d\n", (int)metadata->num_active_cpus);
+	asm volatile("mfence\n\t");
 	cpus2wake = (int)extra_work - (int)metadata->num_active_cpus + 1;
 	if(cpus2wake > 0) {
+	    //printf("cpus2wake=%d\n", cpus2wake);
+	    asm volatile("mfence\n\t");
 	    bm_inactive_cpus = metadata->bit_map_inactive_cpus;
 	    for(i = 0; i < cpus2wake; i++) {  // wake more cpus
 		int64_t hlt_cpu_id;
@@ -120,20 +132,24 @@ start:
 		    // if prempted before hlt, give it a chance to
 		    // hlt. Maybe can be remove TBD
 		    //vmmcall(KVM_HC_SCHED_YIELD, hlt_cpu_id);
-		    //printf("waking %d\n", hlt_cpu_id);
+		    //if(hlt_cpu_id > 1)
+		    //printf("cpu%d:ew:%d,ac:%d,waking %d\n", id64, extra_work, metadata->num_active_cpus, hlt_cpu_id);
 		    vmmcall(KVM_HC_KICK_CPU, 0, hlt_cpu_id);
 		} else
 		    break; // no more cpus to wake
 	    }
 	}
+	mutex_unlock_hlt(&mutex_sched_hlt_path);
 	metadata->current[id] = fn;
-	printf("cpu %d: executing %d\n", id, fn);
+	//printf("cpu %d: executing %d\n", id, fn);
 	jump2fn(id, fn);
 	// perform the work
     }
     else { // no work to do, hlt yourself
+	mutex_unlock_hlt(&mutex_sched_hlt_path);
 	mutex_lock_hlt(&mutex_sched_hlt_path);
-	if((extra_work == 0) && (metadata->num_active_cpus == 1)) {
+	asm volatile("mfence\n\t");
+	if(metadata->num_active_cpus == 1) {
 	    // you are the last guy, dont halt
 	    mutex_unlock_hlt(&mutex_sched_hlt_path);
 	    //printf("cpu %d:All work is finished\n", id);
@@ -147,14 +163,16 @@ start:
 	else {
 	    ATOMIC_DECQ(&(metadata->num_active_cpus));
 	    mutex_unlock_hlt(&mutex_sched_hlt_path);
-	    
-	    //printf("cpu %d: halting,extra_work=%d,active_cpu=%d\n", id, extra_work,metadata->num_active_cpus);
+	    //printf("cpu %d: halting,extra_work=%d,active_cpu=%d,bm=%lX\n", id64, extra_work,metadata->num_active_cpus,metadata->bit_map_inactive_cpus);
 	    asm volatile ("lock bts %2, (%1)\n\t"
 			  "hlt\n\t"
+			  "marker:\n\t"
 			  "lock btr %2, (%1)\n\t"
 			  "lock incq (%0)\n\t":
 			  : "r"(&(metadata->num_active_cpus)),
 			    "r"( &(metadata->bit_map_inactive_cpus)), "r"(id64));
+	    //printf("\n");
+	    //printf("woke: active_cpu = %d\n", metadata->num_active_cpus);
 	}
     }
 

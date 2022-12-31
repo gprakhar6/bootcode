@@ -43,6 +43,7 @@ main: $(OBJS)
 	ld -nostdlib -Tlinker.script -Map=$(BINDIR)/main.map $(OBJS) -o $(BINDIR)/main
 	@objdump -D $(BINDIR)/main > $(BINDIR)/main.dump
 	@cat $(BINDIR)/main.map | grep 'KERN_END = .' | awk '//{print $$0; printf("KERN_END = %d KB\n", $$1/1024);}'
+	./func_mm_gen bin/main
 
 $(OBJDIR)/%.o: %.S
 	gcc $(INCLUDE_FLAGS) -c $< -o $@
