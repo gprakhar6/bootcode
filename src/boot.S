@@ -1,5 +1,6 @@
 .equ MAX_VCPUS,         64
 .equ MSR_EFER		, 0xC0000080
+.equ MSR_KERN_GS_BASE   , 0xC0000102
 .equ EFER_LM		, 0x100
 .equ EFER_LMA		, (0x1 << 10)	
 .equ EFER_NX		, 0x800
@@ -161,10 +162,22 @@ enable_sse:
         popq %rax
         retq
 
-// stack based arguments are not supported right now TBD	
+// stack based arguments are not supported right now TBD
+// swapgs instruction to be explored TBD
 .extern syscall_entry	
 .globl __syscall_entry
 __syscall_entry:
+	swapgs
+	movq  %rsp,%gs:(256*8) // after 256*8
+	movq %gs:0, %rsp
+	pushq %gs:(256*8) // user stack
+	swapgs
+	pushq %rbp // user stack bp
+	pushq %rcx // rip
+	pushq %r11 // rflags
+	//movw    $PORT_HLT, %dx
+	//out     %al, (%dx)	
+	/*
 	movq    %rax, %rbp
 	movq    %rdx, %rsp
 	movw    $PORT_MY_ID, %dx
@@ -176,7 +189,13 @@ __syscall_entry:
 	movq    (%rax), %rdx
 	xchgq   %rdx, %rsp
 	movq    %rbp, %rax
+	*/
 	movq    %rsp, %rbp
+	
+	movq    %rdx, %rcx /* currently syscall supports max 6 args*/
+	movq    %r8, %rdx
+	movq    %r9, %r8
+	movq    %r10, %r9
 	/*
 	rdtscp
 	xchgq %rax, %r15
@@ -185,7 +204,15 @@ __syscall_entry:
 	movb    $0, %al
 	out     %al, (%dx)
 	*/
-	jmp     syscall_entry
+	callq    syscall_entry
+	popq     %r11
+	popq     %rcx
+	popq     %rbp
+	popq     %rsp
+	
+	//movw    $PORT_HLT, %dx
+	//out     %al, (%dx)		
+	sysretq
 	
 .globl user_trampoline, user_trampoline_sz
 user_trampoline:
@@ -200,13 +227,13 @@ user_trampoline_sz = user_trampoline_end - user_trampoline
 // void jump_usermode(void *rip, void *stack);	
 .globl jump_usermode	
 jump_usermode:
-	movq $(0x20 | 3), %rax // user data segment
+	movq $(0x18 | 3), %rax // user data segment
 	pushq %rax
 	pushq %rsi     // stack address
 	movq $0x202, %rax // RFLAGS, (Interrupt Enabled)
 	pushq %rax
 	//pushfq
-	movq $(0x18 | 3), %rax // user code segment
+	movq $(0x20 | 3), %rax // user code segment
 	pushq %rax
 	pushq %rdi // RIP
 	movq %rdx, %rdi // input arg
@@ -228,7 +255,7 @@ reload_gdt:
 	movw   %ax,   %ds 
 	movw   %ax,   %es 
 	movw   %ax,   %fs 
-	movw   %ax,   %gs 
+	//movw   %ax,   %gs // swapgs is using it.
 	movw   %ax,   %ss
 	retq
 	
@@ -442,6 +469,10 @@ long_mode:
         movq    %rax, %ds      // -> DS: Data Segment
         movq    %rax, %es      // -> ES: Extra Segment
         movq    %rax, %ss      // -> SS: Stack Segment
+	movq    %rax, %gs      // -> GS: swapgs help
+	movq    $(MSR_KERN_GS_BASE), %rcx // write MSR_GS with stack addr
+	movq    %rbx, %rax
+	wrmsr
 	call 	enable_sse
 	call    disable_pic
 	call    enable_apic
@@ -481,6 +512,8 @@ wait_for_fill_idt_loop:
 skip_wait_for_fill_idt:	
         movq    $idt_descriptor, %rax
         lidtq   (%rax)
+	//movw    $PORT_HLT, %dx
+	//out     %al, (%dx)	
 	//movw $SERIAL_PORT, %dx
 	//movb $'#', %al
 	//out  %al, (%dx)
@@ -552,8 +585,8 @@ CODE_DESC_64:
 	.quad 0x00AF98000000FFFF
 DATA_DESC_64:
 	.quad 0x00CF92000000FFFF
+	.quad 0x0000000000000000 // user data seg // why ulta?	
 	.quad 0x0000000000000000 // user code seg
-	.quad 0x0000000000000000 // user data seg
 	.fill 512, 8, 0	 // tss seg it is 16 bytes
 	
 gdt64_end:
@@ -640,9 +673,12 @@ idt_descriptor :
     .quad idt // Start address of our idt	
 
 .globl kern_stack	
+.p2align 4
 kern_stack:
-	.fill  512, 8, 0
-	
+	.fill  256, 8, 0
+syscall_user_stack: // used for storing user stack on syscall
+	.fill  256, 8, 0
+
 // paging structures
 .section .paging, "aw", @progbits
 .p2align 12 // page align

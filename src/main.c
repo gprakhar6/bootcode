@@ -110,7 +110,8 @@ int main()
 
     //scheduler_init(pool_sz);
     //outw(PORT_MSG, MSG_BOOTED);
-    
+
+    //printf("swapgs sp = %016X\n", get_kern_stack());
     if(my_id != 0) {
 	//printf("halting %d\n", my_id);
 	asm volatile("hlt");
@@ -191,8 +192,8 @@ void fill_user_mode_gdt()
     gdt_entry_t *gdt_start = (gdt_entry_t *)gdt64_start_c;
     gdt_entry_t *ucs, *uds;
 
-    ucs = &gdt_start[3];
-    uds = &gdt_start[4];
+    ucs = &gdt_start[4];
+    uds = &gdt_start[3];
 
     init_CS(ucs);
     ucs->CS.DPL = 3;
@@ -202,7 +203,11 @@ void fill_user_mode_gdt()
     //hexdump(uds, 8);
 }
 
-void syscall_entry()
+volatile void empty() {
+}
+// dont do anything funny here. Or be cautious. Register clobbering
+// could be an issue
+int syscall_entry()
 {
     register uint64_t nr;
     asm("nop" :"=a"(nr));
@@ -211,9 +216,14 @@ void syscall_entry()
     case 10:
 	scheduler();
 	break;
+    case 11:
+	asm volatile("callq printf_\n\t");
+	//printf("voila\n");
+	break;
     default:
 	break;
     }
+    return nr;
 }
 
 /* 
@@ -237,11 +247,15 @@ void syscall_entry()
 void set_syscall_msrs()
 {
     uint64_t addr;
-    uint32_t ss_cs, star, addr_h, addr_l;
+    uint32_t ss_cs_kernel_call, ss_cs_user_ret;
+    uint32_t star, addr_h, addr_l;
     //printf("In %s\n", __func__);
     // 0x10 is ss 0x08 is code segment
-    ss_cs = (0x08);
-    star = ((ss_cs << 16) | ss_cs);
+    ss_cs_kernel_call = (0x08);
+    // sysret load cs.selector as ss_cs_user_ret+16
+    // and ss.selector as ss_cs_user_ret+8
+    ss_cs_user_ret = 0x10 | 0x3; // user cs
+    star = ((ss_cs_user_ret << 16) | ss_cs_kernel_call);
     set_msr(MSR_STAR, star, 0);
     addr = (uint64_t)&__syscall_entry;
     addr_h = addr >> 32;

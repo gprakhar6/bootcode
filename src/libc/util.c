@@ -88,3 +88,14 @@ void mutex_lock_hlt(mutex_t *m)
     
     return;
 }
+
+// interrupt safety is an issue right now. Ah!
+uint64_t get_kern_stack()
+{
+    uint64_t rax;
+    asm volatile("swapgs\n\t"
+		 "movq %%gs:0, %0\n\t"
+		 "swapgs\n\t": "=a"(rax));
+    
+    return rax;
+}

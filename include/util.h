@@ -256,6 +256,7 @@ static inline void barrier()
 	cond_set(barrier_cond, 0);
     }
 }
+uint64_t get_kern_stack();
 extern uint64_t tsc(); // defined in boot.S
 void *memset(void *s, int c, size_t n);
 void *memcpy (void *dest, void *src, register size_t len);
