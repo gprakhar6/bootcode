@@ -135,7 +135,7 @@ struct t_page_table {
 };
 
 struct t_pg_tbls {
-    struct t_page_table tbl[2];
+    struct t_page_table tbl;
 };
 
 #endif

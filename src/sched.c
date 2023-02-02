@@ -52,10 +52,11 @@ static void jump2fn(uint8_t id, uint8_t fn)
     // TBD perhaps rewrite cr3
     ins = metadata->func_info[fn].entry_addr;
     //hexdump(metadata->func_info[fn].pt_addr, 32);
-    pg_tbls[id].tbl[1].e[2] = metadata->func_info[fn].pt_addr | 0x07;
+    //printf("%016lX %016lX\n", (pg_tbls[id].tbl[0].e[0]), metadata->func_info[fn].pt_addr);
+    pg_tbls[id].tbl.e[0] = metadata->func_info[fn].pt_addr | 0x07;
     reload_cr3();
 
-    /*
+/*    
     printf("Jumping to address = %lX\n stack_addr = %lX	\
 page_table = %lX\n",
 	   metadata->func_info[fn].entry_addr,
@@ -66,7 +67,7 @@ page_table = %lX\n",
     ins = metadata->func_info[fn].entry_addr;
     hexdump(metadata->func_info[fn].pt_addr, 32);
     hexdump(ins, 32);    
-    */
+*/  
     jump_usermode(metadata->func_info[fn].entry_addr,
 		  metadata->func_info[fn].stack_load_addr,
 		  (void *)(0x80000000));

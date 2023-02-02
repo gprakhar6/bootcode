@@ -79,17 +79,17 @@ __reset:
 	movl $0b10100000, %eax             // Set the PAE and PGE bit.
 	movl %eax, %cr4
 	movl $(boot_p4), %eax
-	imull $(512*2), %ecx
-	leal (%eax, %ecx, 8), %eax
-	movl %eax, %cr3
+	imull $(512), %ecx // ecx has cpu id at starting
+	leal (%eax, %ecx, 8), %eax	
+	movl %eax, %cr3	
 	movl $(MSR_EFER), %ecx             // Read from the EFER MSR. 
 	rdmsr
 	orl $(EFER_LM | EFER_NX | EFER_SCE), %eax  // Set the LME bit.
-	wrmsr
+	wrmsr	
 	movl %cr0, %eax
-	orl $0x80000001, %eax // enable paging and protected mode 
-	movl %eax, %cr0 // now we are in compatibility mode
-	movl $gdtr64, %eax
+	orl $0x80000001, %eax // enable paging and protected mode	
+	movl %eax, %cr0 // now we are in compatibility mode	
+	movl $gdtr64, %eax	
 	lgdt (%eax)
 	jmp $0x08, $long_mode	// switch to long mode
 
@@ -224,7 +224,7 @@ user_trampoline:
 	syscall
 user_trampoline_end:
 user_trampoline_sz = user_trampoline_end - user_trampoline
-// void jump_usermode(void *rip, void *stack);	
+// void jump_usermode(void *rip, void *stack, void *arg);	
 .globl jump_usermode	
 jump_usermode:
 	movq $(0x18 | 3), %rax // user data segment
@@ -688,25 +688,31 @@ apic_page:
 	.quad (0xFEE00000 + PG_PRESENT + PG_WRITABLE + PG_BIG + PG_PCD + PG_GLOBAL)
 	.fill 8, 8, 0
 
-kern_pt:
-	.set pg, 0
-	.rept 512
-		.quad (pg + PG_PRESENT + PG_WRITABLE + PG_BIG + PG_GLOBAL)
-		.set pg, pg+(PAGE_SIZE * 512)
-	.endr	
-
-.globl boot_p4
-boot_p4:
-.rept MAX_VCPUS // max vcpus	
-        .quad (. + (512 * 8) + PG_PRESENT + PG_WRITABLE + PG_USER)
-        .fill 511, 8, 0
-
-//boot_p3:
-        .quad (kern_pt + PG_PRESENT + PG_WRITABLE + PG_USER)
+templ_boot_p3:
+        .quad (0 + PG_PRESENT + PG_WRITABLE + PG_BIG)
 	.quad 0 // 1 gb
 	.quad 0 // 2
 	.quad (apic_page + PG_PRESENT + PG_WRITABLE + PG_USER) // 3 gb
-        .fill 508, 8, 0
+        .fill 508, 8, 0	
+//kern_pt:
+//	.set pg, 0
+//	.rept 512
+//		.quad (pg + PG_PRESENT + PG_WRITABLE + PG_BIG + PG_GLOBAL)
+//		.set pg, pg+(PAGE_SIZE * 512)
+//	.endr
+	
+.globl boot_p4
+boot_p4:
+.rept MAX_VCPUS // max vcpus	
+        .quad (templ_boot_p3 + PG_PRESENT + PG_WRITABLE + PG_USER)
+        .fill 511, 8, 0
+
+//boot_p3:
+//        .quad (0 + PG_PRESENT + PG_WRITABLE + PG_BIG)
+//	.quad 0 // 1 gb
+//	.quad 0 // 2
+//	.quad (apic_page + PG_PRESENT + PG_WRITABLE + PG_USER) // 3 gb
+//        .fill 508, 8, 0
 
 .endr	
 
