@@ -271,9 +271,11 @@ flush_tss:
 	retq
 // we use just rax, rdx we will discard	
 .globl tsc
-tsc:	
-	rdtscp
-	retq
+tsc:
+        rdtscp
+        shlq $0x20, %rdx
+        orq %rdx, %rax
+        retq
 //  left-to-right: %rdi, %rsi, %rdx, %rcx, %r8, and %r9.
 // preserve rsp, rbp, rbx, r12-r15	
 .globl _putchar	

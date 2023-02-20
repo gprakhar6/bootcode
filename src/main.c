@@ -86,6 +86,8 @@ int main()
     int i;
     uint64_t *addr = (uint64_t *)0x0008;
     uint64_t t2, t1;
+    volatile int wait_i;
+    
     my_id_pool_sz = get_pool_and_id();
     my_id = my_id_pool_sz & 0xFF;
     pool_sz = (uint8_t)((my_id_pool_sz & 0xFF00) >> 8);
@@ -116,14 +118,22 @@ int main()
 	//printf("halting %d\n", my_id);
 	asm volatile("hlt");
 	inc_active_cpu();
-	printf("Woke %d\n", my_id);
+	//printf("1-Woke %d\n", my_id);
+	//for(wait_i = 0; wait_i < 1000000; wait_i++);
+	//printf("H\n");
+	//asm volatile("hlt");
+	//printf("2-Woke %d\n", my_id);
     }
     else {
 	scheduler_init(pool_sz);
 	outw(PORT_MSG, MSG_BOOTED);
     }
-
-    scheduler();
+    //for(wait_i = 0; wait_i < 1000000; wait_i++);
+    //vmmcall(KVM_HC_KICK_CPU, 0, 1);
+    //vmmcall(KVM_HC_KICK_CPU, 0, 1);
+    //while(1);
+    //scheduler();
+    new_sched();
     
     printf("cpu %d: No return here\n", my_id);
     while(1);
@@ -214,7 +224,8 @@ int syscall_entry()
     
     switch(nr) {
     case 10:
-	scheduler();
+	//scheduler();
+	new_sched();
 	break;
     case 11:
 	asm volatile("callq printf_\n\t");

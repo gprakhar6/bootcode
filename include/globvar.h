@@ -13,7 +13,7 @@
 #define PORT_MSG                        (0x3fe) // and 3ff
 
 #define MAX_CPUS                        (64)
-#define MAX_FUNC                        (256)
+#define MAX_FUNC                        (256) // change get_work if change this, loop unroll
 #define NULL_FUNC                       (255)
 
 #define MSG_SENT_INIT_START             (1)
