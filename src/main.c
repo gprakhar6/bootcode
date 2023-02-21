@@ -23,6 +23,8 @@ extern uint64_t kern_stack[];
 struct tss_entry_t __attribute__((aligned(64))) tss_seg[MAX_CPUS];
 uint8_t __attribute__((aligned(16))) user_stack[16*32];
 
+static uint64_t barrier_bm = ~0;
+
 void user_test_func() {
     volatile uint64_t t1, t2, d, i, n, a, b;
     n = 100;
@@ -55,6 +57,7 @@ void user_test_func() {
     return;
 }
 
+/*
 void send_ipi()
 {
     int i;
@@ -65,6 +68,8 @@ void send_ipi()
     if(get_id() == 0) {
 	apic->esr = 0;
 	//apic->icrh = (0x01) << 24;
+	// 0xC -> all exclusing self
+	// 0x40 is the ipi
 	apic->icrl = ICRL(0x40) | (0xC << 16);
 	//while( (1 < 12) & apic->icrl == 0);
 	//printf("ipi sent\n");
@@ -78,18 +83,20 @@ void send_ipi()
 	}
     }
 }
-
+*/
 int main()
 {
     uint8_t my_id, pool_sz;
     uint16_t my_id_pool_sz;
     int i;
     uint64_t *addr = (uint64_t *)0x0008;
-    uint64_t t2, t1;
+    uint64_t t2, t1, id64, preempted_cpu, tbm;
     volatile int wait_i;
+    struct apic_t *apic = 0xFEE00000;
     
     my_id_pool_sz = get_pool_and_id();
     my_id = my_id_pool_sz & 0xFF;
+    id64 = my_id;
     pool_sz = (uint8_t)((my_id_pool_sz & 0xFF00) >> 8);
     //printf("Calling init boot\n");
     //t1 = tsc();
@@ -98,7 +105,54 @@ int main()
     //printf("dt = %d\n", (t2 - t1) / TSC_TO_US_DIV);
     //asm("sti");
     //printf("Barrier waiting %d\n", get_id());
-    barrier();
+    if(id64 == 0) {
+	tbm = (((uint64_t)1 << pool_sz) - 1);
+	asm volatile("movq %0, %%rax    \n\t"
+		     "lock andq %%rax, %1  \n\t"
+		     :: "m"(tbm),
+		      "m"(barrier_bm)
+		     : "rax", "memory");
+	asm volatile("lock btr %0, %1  \n\t"
+		     :: "r"(id64), "m"(barrier_bm));	
+	while((barrier_bm) != 0) {
+	    asm volatile("bsf %1, %%rax     \n\t"
+			 "movq %%rax, %0    \n\t"
+			 : "=m" (preempted_cpu)
+			 : "m"(barrier_bm)
+			 : "rax", "memory");
+	    //printf("prem %016lX,%016lX\n", preempted_cpu, barrier_bm);
+	    vmmcall(KVM_HC_SCHED_YIELD, preempted_cpu);
+	}
+	//printf("barbm %016lX\n", barrier_bm);
+	scheduler_init(pool_sz);
+	outw(PORT_MSG, MSG_BOOTED);
+	
+	if(send_ipi_to(1,0x40))
+	    printf("sent ipi\n");
+	else
+	    printf("failed ipi\n");
+	while(1);
+    }
+    else {
+	/*
+	asm volatile("lock btrq %0, %1  \n\t"
+		     :: "r"(id64), "m"(barrier_bm));
+	*/
+	//while( read_apic_bit_pack(apic->irr, 0x40) == 0);
+	//printf("%d:bit: %d\n", my_id,read_apic_bit_pack(apic->irr, 0x40) == 0);
+	//while(1);
+	asm volatile("lock btrq %0, %1  \n\t"
+		     "hlt               \n\t"
+		     :: "r"(id64), "m"(barrier_bm));
+	while(1);
+	// to handle spurious wake up events
+	// why it is waking, is a TBD
+	wake_up_event(id64);
+	//printf("1-Woke %d\n", my_id);
+	inc_active_cpu();
+    }
+
+    //barrier();
     //printf("Barier in %d\n", my_id);
     //outb(PORT_HLT, 0);
     /*
@@ -114,11 +168,12 @@ int main()
     //outw(PORT_MSG, MSG_BOOTED);
 
     //printf("swapgs sp = %016X\n", get_kern_stack());
+#if 0
     if(my_id != 0) {
 	//printf("halting %d\n", my_id);
-	asm volatile("hlt");
+	asm volatile("hlt\n\t");
 	inc_active_cpu();
-	//printf("1-Woke %d\n", my_id);
+	printf("1-Woke %d\n", my_id);
 	//for(wait_i = 0; wait_i < 1000000; wait_i++);
 	//printf("H\n");
 	//asm volatile("hlt");
@@ -128,6 +183,7 @@ int main()
 	scheduler_init(pool_sz);
 	outw(PORT_MSG, MSG_BOOTED);
     }
+#endif    
     //for(wait_i = 0; wait_i < 1000000; wait_i++);
     //vmmcall(KVM_HC_KICK_CPU, 0, 1);
     //vmmcall(KVM_HC_KICK_CPU, 0, 1);
@@ -275,6 +331,11 @@ void set_syscall_msrs()
     set_msr(MSR_SFMASK, 0, 0);
 }
 
+void enable_interrupts()
+{
+    struct apic_t *apic = 0xFEE00000;
+}
+
 static mutex_t mutex_bss_load = {0,0,1};
 static mutex_t mutex_tss_fill_flush = {0,0,1};
 void init_boot(uint8_t my_id, uint8_t pool_sz)
@@ -311,6 +372,7 @@ void init_boot(uint8_t my_id, uint8_t pool_sz)
     fill_user_mode_gdt();
     //printf("Setting up syscalls\n");
     set_syscall_msrs();
+    enable_interrupts();
 //    for(i = 0; i <= 6; i++)
 //	printf("descriptor[%d] = %016llX\n", i, *(uint64_t *)&gdt_start[i]);    
 }

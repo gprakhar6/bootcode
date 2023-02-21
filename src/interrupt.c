@@ -54,8 +54,10 @@ void null_func(struct stack_frame_err_t *sf) {
 
 void test_ipi(struct stack_frame_err_t *sf)
 {
-    printf("Got the IPI\n");
-    
+    struct apic_t *apic = 0xFEE00000;
+
+
+    printf("Got the IPI\n");    
 }
 static char pf_err_code[][128] =
 {
@@ -175,7 +177,7 @@ void (*int_func[256])(struct stack_frame_err_t *sf) =
     [0x3d] = null_func,
     [0x3e] = null_func,
     [0x3f] = null_func,
-    [0x40] = null_func,
+    [0x40] = test_ipi,
     [0x41] = null_func,
     [0x42] = null_func,
     [0x43] = null_func,

@@ -1,6 +1,26 @@
 #ifndef __APIC_H__
 #define __APIC_H__
 
+/* 
+dm:    0: physical             (destination mode)
+       1: logical              
+tgm:   0: edge                 (trigger mode)
+       1: level 
+mt:  000: fixed                (message type)
+     001: lowerst-priority 
+     010: smi
+     011: reserved
+     100: nmi
+     101: init
+     110: startup
+     111: reserved
+l:     0: deasset              (level)
+       1: assert                 
+perhaps the in edge case 0,1 distinguish the edge type
+vec:   8 bit                   (vector)
+
+ */
+      
 #define ICRL5(dm,tgm,mt,l,vec) ((tgm << 15) | (l << 14) | (dm << 11) | (mt << 8) | (vec))
 #define ICRL3(mt,l,vec) ICRL5(0, 0, mt, l, vec)
 #define ICRL2(l,vec) ICRL5(0, 0, 0, l, vec)
