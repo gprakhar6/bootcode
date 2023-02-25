@@ -139,11 +139,7 @@ int main()
 	asm volatile("lock btrq %0, %1  \n\t"
 		     "hlt               \n\t"
 		     :: "r"(id64), "m"(barrier_bm));
-	// to handle spurious wake up events
-	// why it is waking, is a TBD
 	wake_up_event(id64);
-	//printf("1-Woke %d\n", my_id);
-	inc_active_cpu();
     }
 
     //barrier();
@@ -182,8 +178,7 @@ int main()
     //vmmcall(KVM_HC_KICK_CPU, 0, 1);
     //vmmcall(KVM_HC_KICK_CPU, 0, 1);
     //while(1);
-    //scheduler();
-    new_sched();
+    sched();
     
     printf("cpu %d: No return here\n", my_id);
     while(1);
@@ -275,7 +270,7 @@ int syscall_entry()
     switch(nr) {
     case 10:
 	//scheduler();
-	new_sched();
+	sched();
 	break;
     case 11:
 	asm volatile("callq printf_\n\t");
