@@ -43,18 +43,27 @@ static int64_t wake_num_vcpu = 0, sig_wake_num_vcpu_is_0 = 1;
 static uint64_t bm_kicked_vcpus, bm_inactive_vcpus;
 static const uint64_t __attribute__((aligned(64))) zero[2] = {0};
 static const int64_t rekick_thd = 1000000;
-static uint64_t __attribute__((aligned(64))) ss_reflective_bm[2];
-static uint64_t __attribute__((aligned(64))) ss_reflective_bm1[2];
+static uint64_t __attribute__((aligned(64))) ss_reflective_bm[2] = {0};
+static uint64_t __attribute__((aligned(64))) ss_reflective_bm1[2] = {0};
 
-void scheduler_init(uint8_t pool_sz)
+void scheduler_init_pre(uint8_t pool_sz)
 {
     stack_init(&work_q, work_q_arr, ARR_SZ_1D(work_q_arr));
     metadata->bit_map_inactive_cpus = (((uint64_t)1 << pool_sz) - 1);
     reset_bit(&(metadata->bit_map_inactive_cpus), 0);
+
+    
+    bm_kicked_vcpus = 0;
+    bm_inactive_vcpus = (((uint64_t)1 << pool_sz) - 1);
+    asm volatile("lock btrq $0, %1 \n\t"
+		 :"+m"(bm_inactive_vcpus)
+		 ::"memory");
     //printf("bm: %lX\n", metadata->bit_map_inactive_cpus);
+    sig_wake_num_vcpu_is_0 = 1;
+    num_free_vcpu = 1;
+	
     metadata->num_active_cpus = 1;
     num_active_vcpu = 1;
-    num_free_vcpu = 1;
     vcpu_pool_sz = pool_sz;
     metadata->dag_ts = 0;
     metadata->dag_n = 0;
@@ -64,6 +73,14 @@ void scheduler_init(uint8_t pool_sz)
     //new_sched();
 }
 
+void scheduler_init_post(uint8_t pool_sz)
+{
+    int i;
+    num_fin_fn = (typeof(num_fin_fn))(metadata->num_nodes);
+    for(i = 1; i < pool_sz; i++) {
+	hlt_ts[i] = tsc();
+    }
+}
 void inc_active_cpu() {
     //printf("b:inc_active_cpu = %d\n", metadata->num_active_cpus);
     ATOMIC_INCQ_M(metadata->num_active_cpus);
@@ -372,10 +389,10 @@ void wake_up_task()
     while((cpuid = e_bsf(&ss_reflective_bm1[0])) >= 0) {
 	dt = tsc() - kick_ts[cpuid];
 	if(dt > rekick_thd) {
-	    vmmcall(KVM_HC_KICK_CPU, 0, (uint64_t)cpuid);
 	    kick_ts[cpuid] = tsc();
+	    vmmcall(KVM_HC_KICK_CPU, 0, (uint64_t)cpuid);
 	}
-	asm volatile("btrq %1, %0      \n\t"
+	asm volatile("lock btrq %1, %0      \n\t"
 		     : "+m"(ss_reflective_bm1[1])
 		     : "rm"(cpuid)
 		     : "memory");
@@ -396,27 +413,32 @@ void wake_up_task()
 	}
 	try_kick_another_vcpu:
 	if((cpuid = e_bsf(&ss_reflective_bm[0])) >= 0) {
+	    //printf("tw:%d\n", cpuid);
 	    // get_hlt_id non blocking
 	    if(hlt_ts[cpuid] > kick_ts[cpuid]) { // first kick
+		//printf("nk:%d\n", cpuid);
 		ATOMIC_INCQ_M(num_free_vcpu);
 		kick_ts[cpuid] = tsc();
-	        vmmcall(KVM_HC_KICK_CPU, 0, (uint64_t)cpuid);
-		asm volatile("btsq %1, %0      \n\t"
-			     : "+m"(ss_reflective_bm[1])
+		//printf("kicking %d\n", cpuid);
+		asm volatile("lock btsq %1, %0      \n\t"
+			     : "+m"(bm_kicked_vcpus)
 			     : "rm"(cpuid)
-			     : "memory");
-		asm volatile("btrq %1, %0      \n\t"
+			     : "memory");		
+	        vmmcall(KVM_HC_KICK_CPU, 0, (uint64_t)cpuid);
+		asm volatile("lock btrq %1, %0      \n\t"
 			     : "+m"(ss_reflective_bm[1])
 			     : "rm"(cpuid)
 			     : "memory");
 	    } else { // already kicked
-		asm volatile("btrq %1, %0      \n\t"
+		asm volatile("lock btrq %1, %0      \n\t"
 		     : "+m"(ss_reflective_bm[1])
 		     : "rm"(cpuid)
 		     : "memory");
 		goto try_kick_another_vcpu;
 	    }
 	}
+	else
+	    break; // no other vcpu I can wake
     }
 }
 void new_sched()
@@ -425,7 +447,9 @@ void new_sched()
     int64_t fn;
     uint64_t id64, tot_fn;
     int64_t spurious_wake_up, spurious_wake_up_ident;
-    
+    uint64_t t1, t2, dt;
+
+    t1 = tsc();
     id = get_id();
     id64 = (uint64_t)id;
     fn = metadata->current[id];
@@ -444,28 +468,45 @@ new_work:
     if((fn = new_get_work()) == -1) {
 	ATOMIC_DECQ_M(num_free_vcpu);
 	tot_fn = metadata->num_nodes;
+	//printf("%d,%d\n", num_fin_fn, tot_fn);
 	if(CAS(&num_fin_fn, tot_fn, 0) == tot_fn) {
+	    //printf("CAS:%d",num_fin_fn);
 	    outw(PORT_MSG, MSG_WAITING_FOR_WORK);
+	    ATOMIC_INCQ_M(num_free_vcpu);
 	    memcpy(metadata->dag_in_count, metadata->dag,
 		   metadata->num_nodes * sizeof(metadata->dag_in_count[0]));
-	    ATOMIC_INCQ_M(num_free_vcpu);
 	    add_runnable_fn(metadata->start_func);
 	}
 	else {
-	    spurious_wake_up = 0;
+	    spurious_wake_up = 1;
 	    hlt_ts[id] = tsc();
-	    asm volatile("         lock btsq  %3, %0   \n\t"
+	    t2 = hlt_ts[id];
+	    dt = t2 - t1;
+	    asm volatile("lock addq %1, %0 \n\t"
+			 :"+m"(metadata->dag_ts)
+			 : "rm"(dt)
+			 : "memory");
+	    asm volatile("lock incq %0     \n\t"
+			 :"+m"(metadata->dag_n)
+			 :: "memory");
+	    asm volatile("         lock btsq  %4, %0   \n\t"
 			 "              hlt            \n\t"
-			 "         lock btrq  %3, %0   \n\t"
-			 "         lock btrq  %3, %1   \n\t"
-			 "              jnc   ret%=    \n\t"
+			 "         lock btrq  %4, %0   \n\t"
+			 "         lock btrq  %4, %1   \n\t"
+			 "              jc    ret%=    \n\t"
+			 "         lock incq  %3       \n\t"
 			 "              xorq  $1, %2   \n\t"
 			 "ret%=:        xorq  $1, %2   \n\t"  
 			 : "+m"(bm_inactive_vcpus),
 			   "+m"(bm_kicked_vcpus),
-			   "+m"(spurious_wake_up)
+			   "+m"(spurious_wake_up),
+			   "+m"(num_free_vcpu)
 			 : "rm"(id64)
 			 : "memory" );
+	    t1 = tsc();
+	    if(spurious_wake_up == 1) {
+		printf("spurious wake up %d,%d\n", id,num_free_vcpu);
+	    }
 	}
 	goto new_work;
     }
@@ -474,6 +515,15 @@ new_work:
 	ATOMIC_DECQ_M(runnable_tasks);
 	// do work
 	//printf("%d:f%d,%d,%d\n",id,fn, num_active_vcpu,num_free_vcpu);
+	t2 = tsc();
+	dt = t2 - t1;
+	asm volatile("lock addq %1, %0 \n\t"
+		     :"+m"(metadata->dag_ts)
+		     : "rm"(dt)
+		     : "memory");
+	asm volatile("lock incq %0     \n\t"
+		     :"+m"(metadata->dag_n)
+		     :: "memory");	
 	new_jump2fn(id, (uint8_t)fn);
     }
 
@@ -484,10 +534,14 @@ new_work:
 // num_active_vcpu count
 void wake_up_event(uint64_t id)
 {
-    asm volatile("btr %1, (%2)    \n\t"
-		 "jnc no_inc%=    \n\t"
-		 "lock incq %0    \n\t"
+    asm volatile("           lock btrq %3, %1    \n\t"
+		 "           lock btrq %3, %2    \n\t"
+		 "                jc no_inc%=    \n\t"
+		 "           lock incq %0        \n\t"
 		 "no_inc%=:       \n\t"
-		 : "+m"(num_active_vcpu)
-		 : "r"(id), "r"(&(metadata->bit_map_inactive_cpus)));
+		 : "+m"(num_free_vcpu), "+m"(bm_inactive_vcpus),
+		   "+m"(bm_kicked_vcpus)
+		 : "r"(id)
+		 : "memory");
+
 }

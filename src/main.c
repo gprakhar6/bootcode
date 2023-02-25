@@ -124,8 +124,9 @@ int main()
 	    vmmcall(KVM_HC_SCHED_YIELD, preempted_cpu);
 	}
 	//printf("barbm %016lX\n", barrier_bm);
-	scheduler_init(pool_sz);
+	scheduler_init_pre(pool_sz);
 	outw(PORT_MSG, MSG_BOOTED);
+	scheduler_init_post(pool_sz);
     }
     else {
 	/*

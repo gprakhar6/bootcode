@@ -279,27 +279,27 @@ static inline int64_t e_bsf(uint64_t *m) {
     return rax;
 }
 
-static inline uint64_t CAS(uint64_t *dst, uint64_t src, uint64_t val) {
+static inline uint64_t CAS(uint64_t *dst, uint64_t rax, uint64_t src) {
     asm volatile("       lock cmpxchgq    %2, %0    \n\t"
-		 : "+m"(*dst), "+a"(val)
+		 : "+m"(*dst), "+a"(rax)
 		 : "r"(src)
 		 : "memory");
-    return val;
-    
+    return rax;
 }
 
 // double cas
-static inline uint64_t DCAS(uint64_t dst[2], uint64_t src[2],
-			    uint64_t val[2]) {
+static inline uint64_t DCAS(uint64_t dst[2], uint64_t rdx_rax[2],
+			    uint64_t rcx_rbx[2]) {
     uint64_t rax, f, s;
     f = 0;
     s = 1;
-    rax = src[0];
+    rax = rdx_rax[0];
     asm volatile("       lock cmpxchg16b  (%1)    \n\t"
 		 "            cmovz       %6, %0  \n\t"
 		 "            cmovnz      %5, %0  \n\t"
 		 : "+a"(rax)
-		 : "r" (dst), "d"(src[1]), "c"(val[1]), "b"(val[0]),
+		 : "r" (dst), "d"(rdx_rax[1]), "c"(rcx_rbx[1]),
+		   "b"(rcx_rbx[0]),
 		   "r"(f), "r"(s)
 		 : "memory");
     return rax;
