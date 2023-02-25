@@ -25,7 +25,7 @@ int send_ipi_to_all(uint8_t vector)
     // 0x40 is the ipi
     apic->icrl = ICRL(vector) | (0xC << 16);
     //printf("esr: %08X\n", apic->esr);
-    while(((1 < 12) & apic->icrl == 0) && (wait_cnt--));
+    while(((1 < 12) & apic->icrl == 1) && (wait_cnt--));
     ret = (((1 < 12) & apic->icrl == 0) == 0) ? 1 : 0;
     return ret;
 }
@@ -39,7 +39,7 @@ int send_ipi_to(uint8_t id, uint8_t vector)
     apic->esr = 0;
     apic->icrh = ((uint32_t)id) << 24;
     apic->icrl = ICRL(vector);
-    while(((1 < 12) & apic->icrl == 0) && (wait_cnt--));
+    while(((1 < 12) & apic->icrl == 1) && (wait_cnt--));
     ret = (((1 < 12) & apic->icrl == 0) == 0) ? 1 : 0;
     return ret;
 }

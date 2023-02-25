@@ -126,12 +126,6 @@ int main()
 	//printf("barbm %016lX\n", barrier_bm);
 	scheduler_init(pool_sz);
 	outw(PORT_MSG, MSG_BOOTED);
-	
-	if(send_ipi_to(1,0x40))
-	    printf("sent ipi\n");
-	else
-	    printf("failed ipi\n");
-	while(1);
     }
     else {
 	/*
@@ -144,7 +138,6 @@ int main()
 	asm volatile("lock btrq %0, %1  \n\t"
 		     "hlt               \n\t"
 		     :: "r"(id64), "m"(barrier_bm));
-	while(1);
 	// to handle spurious wake up events
 	// why it is waking, is a TBD
 	wake_up_event(id64);
@@ -334,6 +327,7 @@ void set_syscall_msrs()
 void enable_interrupts()
 {
     struct apic_t *apic = 0xFEE00000;
+    asm volatile("sti \n\t");
 }
 
 static mutex_t mutex_bss_load = {0,0,1};

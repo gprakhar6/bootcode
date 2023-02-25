@@ -25,10 +25,17 @@ void high_interrupt_handler(void *rdi)
 {
     uint8_t my_id;
     //uint64_t indicator;
-    struct stack_frame_err_t *sf_err;
+    struct stack_frame_err_t *sf_err;    
     //indicator = *(uint64_t *)rdi;
     sf_err = (struct stack_frame_err_t *)rdi;
-
+    
+    if(sf_err->int_num == 0x40) { // kick this fellow
+	volatile struct apic_t *apic = 0xFEE00000;
+	apic->eoi = 0; // end of interrupt
+	//asm volatile("sti \n\t");
+	return;
+    }
+    
     my_id = get_id();
 //    if(sf_err->int_num == 0x81)
 //	asm("hlt");
@@ -54,10 +61,9 @@ void null_func(struct stack_frame_err_t *sf) {
 
 void test_ipi(struct stack_frame_err_t *sf)
 {
-    struct apic_t *apic = 0xFEE00000;
-
-
-    printf("Got the IPI\n");    
+    volatile struct apic_t *apic = 0xFEE00000;
+    apic->eoi = 0;
+    //printf("Got the IPI\n");    
 }
 static char pf_err_code[][128] =
 {

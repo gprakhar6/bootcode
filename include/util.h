@@ -22,7 +22,7 @@
 #define ARR_SZ_1D(x) (sizeof(x)/sizeof(x[0]))
 
 #define GET_VMMCALL_NAME(_1,_2,_3,_4, NAME, ...) NAME
-// upto 4 arguments rbx, rcx, rdx, and rsi
+// upto 4 arguments rbx(a0), rcx(a1), rdx(a2), and rsi(a3)
 // rax has system call and return
 #define vmmcall(...) GET_VMMCALL_NAME(__VA_ARGS__,vmmcall4,vmmcall3,vmmcall2,vmmcall1)(__VA_ARGS__)
 
@@ -188,13 +188,13 @@ volatile static inline void cond_set(cond_t *c, uint64_t v)
 	    vmmcall(KVM_HC_KICK_CPU, 0, hlt_cpu);
 	reset_bit(&waiting_cpus, hlt_cpu);
     }
-    
+
     /*
     asm volatile ("movq %0, 16(%2)\n\t"
 		  // because bsf could cause load which
-		  // can be reordered before movq store		  
+		  // can be reordered before movq store
 		  "check_scan_for_intent%=:\n\t"
-		  "sfence\n\t"		  
+		  "sfence\n\t"
 		  "bsf (%2), %1\n\t"
 		  "movq %1, %4\n\t"
 		  "jz no_cpu_with_intent%=\n\t"
@@ -245,10 +245,10 @@ static inline void barrier()
 
     ATOMIC_INCQ(barrier_word);
     if(*barrier_word == ncpus) {
-	//printf("%d: c->intent_cpus %lX, waiting_cpus = %lX\n", id, ((cond_t *)barrier_cond)->intent_cpus, ((cond_t *)barrier_cond)->waiting_cpus);	
+	//printf("%d: c->intent_cpus %lX, waiting_cpus = %lX\n", id, ((cond_t *)barrier_cond)->intent_cpus, ((cond_t *)barrier_cond)->waiting_cpus);
 	cond_set(barrier_cond, 1);
 	//printf("kick_everyone\n");
-	//printf("%d: c->intent_cpus %lX, waiting_cpus = %lX\n", id, ((cond_t *)barrier_cond)->intent_cpus, ((cond_t *)barrier_cond)->waiting_cpus);	
+	//printf("%d: c->intent_cpus %lX, waiting_cpus = %lX\n", id, ((cond_t *)barrier_cond)->intent_cpus, ((cond_t *)barrier_cond)->waiting_cpus);
     }
     else {
 	//printf("cond_wait :%d\n", id);
@@ -260,6 +260,61 @@ static inline void barrier()
 	cond_set(barrier_cond, 0);
     }
 }
+
+
+// extract bit and clear set bit from 64 bit memory area,
+// without lock
+static inline int64_t e_bsf(uint64_t *m) {
+    int64_t rax,f;
+    f = -1;
+    asm volatile("new%=:     bsf     %0, %1       \n\t"
+                 "           jz      ret_ns%=     \n\t"
+                 "      lock btrq    %1, %0       \n\t"
+                 "           jnc     new%=        \n\t"
+                 "ret_ns%=:  cmovz   %2, %1       \n\t"
+                 : "+m" (*m), "=a"(rax)
+                 : "r"(f)
+                 : "memory");
+
+    return rax;
+}
+
+static inline uint64_t CAS(uint64_t *dst, uint64_t src, uint64_t val) {
+    asm volatile("       lock cmpxchgq    %2, %0    \n\t"
+		 : "+m"(*dst), "+a"(val)
+		 : "r"(src)
+		 : "memory");
+    return val;
+    
+}
+
+// double cas
+static inline uint64_t DCAS(uint64_t dst[2], uint64_t src[2],
+			    uint64_t val[2]) {
+    uint64_t rax, f, s;
+    f = 0;
+    s = 1;
+    rax = src[0];
+    asm volatile("       lock cmpxchg16b  (%1)    \n\t"
+		 "            cmovz       %6, %0  \n\t"
+		 "            cmovnz      %5, %0  \n\t"
+		 : "+a"(rax)
+		 : "r" (dst), "d"(src[1]), "c"(val[1]), "b"(val[0]),
+		   "r"(f), "r"(s)
+		 : "memory");
+    return rax;
+    
+}
+
+static inline uint64_t xadd(int64_t *m, int64_t rax) {
+    asm volatile("lock xaddq %1, %0    \n\t"
+		 :"+m"(*m), "+a"(rax)
+		 :
+		 : "memory");
+
+    return rax;
+}
+
 uint64_t get_kern_stack();
 extern uint64_t tsc(); // defined in boot.S
 void *memset(void *s, int c, size_t n);
