@@ -282,17 +282,19 @@ new_work:
 	//printf("%d,%d\n", num_fin_fn, tot_fn);
 	if(CAS(&num_fin_fn, tot_fn, 0) == tot_fn) {
 	    //printf("CAS:%d",num_fin_fn);
-	    outw(PORT_MSG, MSG_WAITING_FOR_WORK);
+ 	    outw(PORT_MSG, MSG_WAITING_FOR_WORK);
 	    ATOMIC_INCQ_M(num_free_vcpu);
 	    // recovery code. To reset num_free_vcpu to 1
 	    // this will definitely trigger if there is a long
 	    // break. Else may not trigger, sometimes
-	    asm volatile("popcntq %1, %0"
-			 :"=rm"(popcnt)
-			 : "m"(bm_inactive_vcpus));
-	    if((vcpu_pool_sz - popcnt) == 1) {
-		num_free_vcpu = 1;
-		runnable_tasks = 0;
+	    if (bm_kicked_vcpus == 0) {
+		asm volatile("popcntq %1, %0"
+			     :"=rm"(popcnt)
+			     : "m"(bm_inactive_vcpus));
+		if((vcpu_pool_sz - popcnt) == 1) {
+		    num_free_vcpu = 1;
+		    runnable_tasks = 0;
+		}
 	    }
 	    memcpy(metadata->dag_in_count, metadata->dag,
 		   metadata->num_nodes * sizeof(metadata->dag_in_count[0]));
@@ -359,7 +361,7 @@ void wake_up_event(uint64_t id)
 		 "           lock btrq %3, %2    \n\t"
 		 "                jc no_inc%=    \n\t"
 		 "           lock incq %0        \n\t"
-		 "no_inc%=:       \n\t"
+		 "no_inc%=:                      \n\t"
 		 : "+m"(num_free_vcpu), "+m"(bm_inactive_vcpus),
 		   "+m"(bm_kicked_vcpus)
 		 : "r"(id)

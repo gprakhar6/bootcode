@@ -10,14 +10,10 @@
 
 #define RETRY_COUNT (32)
 
-#define ATOMIC_INCQ_M(x) asm volatile("lock\n\t" \
-				    "incq %0\n" ::"m"(x))
-#define ATOMIC_DECQ_M(x) asm volatile("lock\n\t"\
-				    "decq %0\n" ::"m"(x))
-#define ATOMIC_INCQ(x) asm volatile("lock\n\t" \
-				    "incq (%0)\n" ::"r"(x))
-#define ATOMIC_DECQ(x) asm volatile("lock\n\t"\
-				    "decq (%0)\n" ::"r"(x))
+#define ATOMIC_INCQ_M(x) asm volatile("lock incq %0\n\t" ::"m"(x))
+#define ATOMIC_DECQ_M(x) asm volatile("lock decq %0\n\t" ::"m"(x))
+#define ATOMIC_INCQ(x) asm volatile("lock incq (%0)\n\t" ::"r"(x))
+#define ATOMIC_DECQ(x) asm volatile("lock decq (%0)\n\t" ::"r"(x))
 
 #define ARR_SZ_1D(x) (sizeof(x)/sizeof(x[0]))
 
