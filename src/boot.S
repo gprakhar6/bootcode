@@ -192,7 +192,7 @@ __syscall_entry:
 	*/
 	movq    %rsp, %rbp
 	
-	movq    %rdx, %rcx /* currently syscall supports max 6 args*/
+	movq    %rdx, %rcx /* currently syscall supports max 5 args*/
 	movq    %r8, %rdx
 	movq    %r9, %r8
 	movq    %r10, %r9
