@@ -51,6 +51,6 @@ __attribute__((section(".layout"))) const uint64_t bss_size		= (uint64_t)&BSS_SI
 __attribute__((section(".layout"))) const uint64_t stack_start		= (uint64_t)&STACK_START;
 __attribute__((section(".layout"))) const uint64_t stack_size		= (uint64_t)&STACK_SIZE;
 
-mutex_t mutex_printf = {.intent_cpus = 0,.waiting_cpus = 0,.m = 1};
+mutex_t mutex_printf = {0};
 
 //uint64_t t1, t2;

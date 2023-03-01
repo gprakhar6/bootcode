@@ -23,7 +23,8 @@
 .equ RING0,               (0)
 .equ RING3,               (3)	
 .equ INTERRUPT_GATE,      (0xe)	
-.equ EXCEPTION_GATE,      (0xf)	
+.equ EXCEPTION_GATE,      (0xf)
+.equ PORT_SYSCALL,        (0xfe) // and 0xff
 .equ SERIAL_PORT,         (0x3f8)
 .equ PORT_HLT,            (0x3fa)	
 .equ PORT_MY_ID,          (0x3fc) // and 3fd perhaps
@@ -164,6 +165,8 @@ enable_sse:
 
 // stack based arguments are not supported right now TBD
 // swapgs instruction to be explored TBD
+// 0 to 0x200 is bypassed to VMM, rest should be handled by
+// the runtime
 .extern syscall_entry	
 .globl __syscall_entry
 __syscall_entry:
@@ -192,10 +195,14 @@ __syscall_entry:
 	*/
 	movq    %rsp, %rbp
 	
-	movq    %rdx, %rcx /* currently syscall supports max 5 args*/
+	movq    %rdx, %rcx /* currently syscall supports max 6 args*/
 	movq    %r8, %rdx
 	movq    %r9, %r8
 	movq    %r10, %r9
+	cmpq    $0x200, %rax
+	jg      rt_syscall
+	outw    %ax, $PORT_SYSCALL
+	jmp     fin_syscall
 	/*
 	rdtscp
 	xchgq %rax, %r15
@@ -204,7 +211,9 @@ __syscall_entry:
 	movb    $0, %al
 	out     %al, (%dx)
 	*/
+rt_syscall:
 	callq    syscall_entry
+fin_syscall:
 	popq     %r11
 	popq     %rcx
 	popq     %rbp

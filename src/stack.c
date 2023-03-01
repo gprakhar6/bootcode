@@ -14,7 +14,7 @@
 
 #define define_stack_push(x) int CONCAT(stack_push_, x)(t_stack *q, x *e) { \
 	int ret;							\
-	mutex_lock_hlt(&(q->m)); 					\
+	mutex_lock(&(q->m));    					\
 	if(q->n < q->tsz) {						\
 	    ret = 0;							\
 	    *(x *)(q->head) = *e;					\
@@ -23,14 +23,14 @@
 	} else {							\
 	    ret = -1;							\
 	}								\
-	mutex_unlock_hlt(&(q->m));					\
+	mutex_unlock(&(q->m));	           				\
 	return ret;							\
     }
 
 
 #define define_stack_pop(x) int CONCAT(stack_pop_, x)(t_stack *q, x *e) { \
 	int ret;							\
-	mutex_lock_hlt(&(q->m)); 					\
+	mutex_lock(&(q->m)); 	            				\
 	if(q->n > 0) {							\
 	    ret = 0;							\
 	    q->head = (void *)(((x *)q->head) - 1);			\
@@ -39,7 +39,7 @@
 	} else {							\
 	    ret = -1;							\
 	}								\
-	mutex_unlock_hlt(&(q->m));					\	
+	mutex_unlock(&(q->m));   					\	
 	return ret;							\
     }
 

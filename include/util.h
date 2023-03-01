@@ -220,9 +220,33 @@ volatile static inline void cond_set(cond_t *c, uint64_t v)
 
 volatile static inline void mutex_init(mutex_t *m)
 {
-    asm volatile("movq $1, (%%rax)" :: "a"(&m->m));
-    m->intent_cpus = 0;
-    m->waiting_cpus = 0;
+    asm volatile("movq $0, %0" :"+m"(m->m)::"memory");
+}
+
+static inline void mutex_lock(mutex_t *m)
+{
+    uint64_t id, retry_cntr;
+    id = (uint64_t)1 << get_id();
+    asm volatile("inire%=:        movq     $3072, %1      \n\t" //  RETRY COUNT
+		 "retry%=:        xorq     %%rax, %%rax   \n\t"
+                 "           lock cmpxchgq %2, %0         \n\t"
+                 "                jz       ret%=          \n\t"
+                 "                decq     %1             \n\t"
+		 "                pause                   \n\t"
+                 "                jnz      retry%=        \n\t"
+                 "                bsfq     %0, %%rbx      \n\t"
+                 "                movq     $11,%%rax      \n\t"
+                 "                vmmcall                 \n\t" // yield to Lock Holder
+                 "                jmp      inire%=        \n\t"
+                 "ret%=:                                  \n\t"
+                 : "+m"(m->m), "+m"(retry_cntr)
+                 : "rm"(id)
+                 : "rax", "rbx", "memory");
+}
+
+static inline void mutex_unlock(mutex_t *m)
+{
+    asm volatile("movq $0, %0 \n\t": "+m"(m->m));
 }
 
 void mutex_unlock_hlt(mutex_t *m);

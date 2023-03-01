@@ -84,6 +84,39 @@ void send_ipi()
     }
 }
 */
+
+
+static volatile uint64_t new_mutex = 0, n_barrier = 0, s_barrier = 0, test_var = 0;
+void test_new_mutex()
+{
+    volatile uint64_t i, j = 0;
+    while(1) {
+	mutex_lock(&new_mutex);
+	for(i = 0; i < 1000; i++);
+	mutex_unlock(&new_mutex);
+	for(i = 0; i < 100000; i++);
+	/*
+	asm volatile("lock incq %0 \n\t": "+m"(n_barrier)::"memory");
+	if(n_barrier == 4) {
+	    s_barrier = 1;
+	}
+	else {
+	    while(s_barrier != 1);
+	}
+	asm volatile("lock decq %0 \n\t": "+m"(n_barrier)::"memory");
+	if(n_barrier == 0) {
+	    s_barrier = 0;
+	}
+	else
+	    while(s_barrier != 0);
+        j++;
+	if( j%100 == 0)
+	    printf("j = %ld\n", j);
+	*/
+    }
+}
+
+
 int main()
 {
     uint8_t my_id, pool_sz;
@@ -101,6 +134,8 @@ int main()
     //printf("Calling init boot\n");
     //t1 = tsc();
     init_boot(my_id, pool_sz);
+    //printf("id(%d) = apicid(%d)\n", (int)get_id(), apic->id >> 24);
+    //test_new_mutex();
     //t2 = tsc();
     //printf("dt = %d\n", (t2 - t1) / TSC_TO_US_DIV);
     //asm("sti");
@@ -266,13 +301,15 @@ int syscall_entry()
 {
     register uint64_t nr;
     asm("nop" :"=a"(nr));
-    
     switch(nr) {
-    case 10:
+    case 0:
+	printf("Bad system call\n");
+	break;
+    case 0x20a:
 	//scheduler();
 	sched();
 	break;
-    case 11:
+    case 0x20b:
 	asm volatile("callq printf_\n\t");
 	//printf("voila\n");
 	break;
@@ -326,8 +363,8 @@ void enable_interrupts()
     asm volatile("sti \n\t");
 }
 
-static mutex_t mutex_bss_load = {0,0,1};
-static mutex_t mutex_tss_fill_flush = {0,0,1};
+//static mutex_t mutex_bss_load = {0,0,1};
+static mutex_t mutex_tss_fill_flush = {0};
 void init_boot(uint8_t my_id, uint8_t pool_sz)
 {
     int i;
@@ -338,26 +375,28 @@ void init_boot(uint8_t my_id, uint8_t pool_sz)
     //pool_sz = get_pool_sz();
     //printf("my id = %d, pool_sz = %d\n", my_id, pool_sz);
     // zero out the bss section
+    // below code is commented because, kernel already gives
+    // zero out pages (TBD verify)
+    /*
     mutex_lock_hlt(&mutex_bss_load);
     memset((void *)bss_start, 0, bss_size);
     mutex_unlock_hlt(&mutex_bss_load);
+    */
     //printf("Filling TSS\n");
     // my_id+5 because first 4 entries are occupied in gdt
     stack_addr = *(uint64_t *)(kern_stack + my_id); // keep some 16 bytes free
     //printf("stack_addr[%d] = %llX\n", my_id, stack_addr);
 
-
     // perhaps the tss filling and flushing
     // must happen as atomic
     // if one processor modified tss, while other
     // does ltr, perhaps that is the issue
-    mutex_lock_hlt(&mutex_tss_fill_flush);
+    mutex_lock(&mutex_tss_fill_flush);
     fill_tss(&tss_seg[my_id], (struct sys_desc_t *)&gdt_start[my_id+5],
 	stack_addr);
-    
     //printf("Flushing TSS\n");
     flush_tss(my_id);
-    mutex_unlock_hlt(&mutex_tss_fill_flush);
+    mutex_unlock(&mutex_tss_fill_flush);
     //printf("Filling user mode gdt\n");
     fill_user_mode_gdt();
     //printf("Setting up syscalls\n");
