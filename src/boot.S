@@ -1,5 +1,7 @@
 .equ MAX_VCPUS,         64
 .equ MSR_EFER		, 0xC0000080
+.equ MSR_FS_BASE        , 0xC0000100
+.equ MSR_GS_BASE        , 0xC0000101
 .equ MSR_KERN_GS_BASE   , 0xC0000102
 .equ EFER_LM		, 0x100
 .equ EFER_LMA		, (0x1 << 10)	
@@ -24,6 +26,8 @@
 .equ RING3,               (3)	
 .equ INTERRUPT_GATE,      (0xe)	
 .equ EXCEPTION_GATE,      (0xf)
+.equ SHARED_RO_ADDR,      (0x40000000)
+
 .equ PORT_SYSCALL,        (0xfe) // and 0xff
 .equ SERIAL_PORT,         (0x3f8)
 .equ PORT_HLT,            (0x3fa)	
@@ -233,7 +237,7 @@ user_trampoline:
 	syscall
 user_trampoline_end:
 user_trampoline_sz = user_trampoline_end - user_trampoline
-// void jump_usermode(void *rip, void *stack, void *arg);	
+// void jump_usermode(void *rip, void *stack, void *arg, uint64_t id);
 .globl jump_usermode	
 jump_usermode:
 	movq $(0x18 | 3), %rax // user data segment
@@ -246,6 +250,9 @@ jump_usermode:
 	pushq %rax
 	pushq %rdi // RIP
 	movq %rdx, %rdi // input arg
+	movq %rcx, %rsi // fn id
+	//movw    $PORT_HLT, %dx
+	//out     %al, (%dx)		
 	iretq
 	hlt
 .globl reload_gdt
@@ -484,6 +491,18 @@ long_mode:
 	movq    $(MSR_KERN_GS_BASE), %rcx // write MSR_GS with stack addr
 	movq    %rbx, %rax
 	wrmsr
+	// this below 3 ins is for TBD explain
+	/*
+	the math lib, uses `movw fs:28, %rax` sort of instruction
+	perhaps used for magic word to detect stack corruption.
+	so fs has to be a sane value.
+
+	so the 1GB (0x4000_0000) is now mapped to a RO data. and
+	which fs is mapped to beginning of this ro data. 
+	*/
+	movq    $(MSR_FS_BASE), %rcx // write MSR_FS with shm addr
+	movq    $(SHARED_RO_ADDR), %rax // TBD to write eleg
+	wrmsr
 	call 	enable_sse
 	call    disable_pic
 	call    enable_apic
@@ -699,10 +718,13 @@ apic_page:
 	.quad (0xFEE00000 + PG_PRESENT + PG_WRITABLE + PG_BIG + PG_PCD + PG_GLOBAL)
 	.fill 8, 8, 0
 
+shared_ro_page:
+	.fill 512, 8, 0
+	
 templ_boot_p3:
         .quad (0 + PG_PRESENT + PG_WRITABLE + PG_BIG)
-	.quad 0 // 1 gb
-	.quad 0 // 2
+	.quad (shared_ro_page + PG_PRESENT + PG_WRITABLE + PG_USER) // 1 gb
+	.quad 0 // 2, for the funcs
 	.quad (apic_page + PG_PRESENT + PG_WRITABLE + PG_USER) // 3 gb
         .fill 508, 8, 0	
 //kern_pt:

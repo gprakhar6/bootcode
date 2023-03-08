@@ -93,6 +93,7 @@ void page_fault_handler(struct stack_frame_err_t *sf)
     asm("movq %%cr2, %0" : "=r" (cr2));
 
     printf("CR2 = %016llX\n", cr2);
+    printf("\n");
 }
 
 void pic_handler(struct stack_frame_err_t *sf)

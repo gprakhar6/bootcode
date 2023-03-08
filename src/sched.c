@@ -13,7 +13,7 @@ extern char boot_p4[], kern_end[];
 struct t_pg_tbls *pg_tbls = (struct t_pg_tbls *)boot_p4;
 struct t_metadata *metadata = (struct t_metadata *)0x0008;
 
-extern void jump_usermode(void *rip, void *stack, void *arg);
+extern void jump_usermode(void *rip, void *stack, void *arg, uint64_t id);
 
 // for the new scheduler
 int64_t get_work();
@@ -82,7 +82,7 @@ page_table = %lX\n",
 */  
     jump_usermode(metadata->func_info[fn].entry_addr,
 		  metadata->func_info[fn].stack_load_addr,
-		  (void *)(0x80000000));
+		  (void *)(0x80000000), fn);
 }
 
 static inline void add_runnable_fn(uint8_t fn) {
