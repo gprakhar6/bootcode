@@ -237,7 +237,7 @@ user_trampoline:
 	syscall
 user_trampoline_end:
 user_trampoline_sz = user_trampoline_end - user_trampoline
-// void jump_usermode(void *rip, void *stack, void *arg, uint64_t id);
+// void jump_usermode(void *rip, void *stack, uint64_t args[]);
 .globl jump_usermode	
 jump_usermode:
 	movq $(0x18 | 3), %rax // user data segment
@@ -249,10 +249,11 @@ jump_usermode:
 	movq $(0x20 | 3), %rax // user code segment
 	pushq %rax
 	pushq %rdi // RIP
-	movq %rdx, %rdi // input arg
-	movq %rcx, %rsi // fn id
+	movq (%rdx), %rdi // input arg
+	movq 8(%rdx), %rsi // fn id
+	movq 16(%rdx), %rdx // fn id
 	//movw    $PORT_HLT, %dx
-	//out     %al, (%dx)		
+	//out     %al, (%dx)	
 	iretq
 	hlt
 .globl reload_gdt

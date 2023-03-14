@@ -13,7 +13,7 @@ extern char boot_p4[], kern_end[];
 struct t_pg_tbls *pg_tbls = (struct t_pg_tbls *)boot_p4;
 struct t_metadata *metadata = (struct t_metadata *)0x0008;
 
-extern void jump_usermode(void *rip, void *stack, void *arg, uint64_t id);
+extern void jump_usermode(void *rip, void *stack, uint64_t arg[]);
 
 // for the new scheduler
 int64_t get_work();
@@ -59,6 +59,7 @@ void scheduler_init_post(uint8_t pool_sz)
 static void jump2fn(uint8_t id, uint8_t fn)
 {
     char *ins;
+    uint64_t args[3]; // in, out, id
     metadata->current[id] = fn;
     //printf("In Scheduler\n");
     // TBD perhaps rewrite cr3
@@ -79,10 +80,16 @@ page_table = %lX\n",
     ins = metadata->func_info[fn].entry_addr;
     hexdump(metadata->func_info[fn].pt_addr, 32);
     hexdump(ins, 32);    
-*/  
+*/
+
+    args[0] = (uint64_t)metadata->func_info[fn].inp_off +
+	(uint64_t)0x80000000;
+    args[1] = (uint64_t)metadata->func_info[fn].out_off +
+	(uint64_t)0x80000000;    
+    args[2] = fn;
     jump_usermode(metadata->func_info[fn].entry_addr,
 		  metadata->func_info[fn].stack_load_addr,
-		  (void *)(0x80000000), fn);
+		  args);
 }
 
 static inline void add_runnable_fn(uint8_t fn) {
@@ -271,7 +278,10 @@ void sched()
 	process_sched_dag(id, fn);
 	metadata->current[id] = NULL_FUNC;
     }
-    wake_up_task();
+    // no need to do any wakeup if i am alone
+    // in my universe. No one's there to help.
+    if(vcpu_pool_sz != 1)
+	wake_up_task();
     if(fn != NULL_FUNC)
 	ATOMIC_INCQ_M(num_fin_fn);
 
