@@ -30,6 +30,7 @@ static const uint64_t __attribute__((aligned(64))) zero[2] = {0};
 static const int64_t rekick_thd = 1000000; // 344 us at 2.9ghz
 static uint64_t __attribute__((aligned(64))) ss_reflective_bm[2] = {0};
 static uint64_t __attribute__((aligned(64))) ss_reflective_bm1[2] = {0};
+static uint64_t func_times[MAX_FUNC];
 
 void scheduler_init_pre(uint8_t pool_sz)
 {   
@@ -87,6 +88,7 @@ page_table = %lX\n",
     args[1] = (uint64_t)metadata->func_info[fn].out_off +
 	(uint64_t)0x80000000;    
     args[2] = fn;
+    func_times[fn] = tsc();
     jump_usermode(metadata->func_info[fn].entry_addr,
 		  metadata->func_info[fn].stack_load_addr,
 		  args);
@@ -274,6 +276,9 @@ void sched()
     //printf("%d: comp %d\n", id, fn);
     if(fn != NULL_FUNC) { // previous invoc execed a fn
 	ATOMIC_INCQ_M(num_free_vcpu);
+	metadata->dag_func_time[fn] =
+	    (typeof(metadata->dag_func_time[fn]))(tsc() -
+						  func_times[fn]);
 	//printf("id: %d, tsc: %d\n", id, tsc() / 1000);
 	process_sched_dag(id, fn);
 	metadata->current[id] = NULL_FUNC;
