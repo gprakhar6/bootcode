@@ -31,6 +31,7 @@ static const int64_t rekick_thd = 1000000; // 344 us at 2.9ghz
 static uint64_t __attribute__((aligned(64))) ss_reflective_bm[2] = {0};
 static uint64_t __attribute__((aligned(64))) ss_reflective_bm1[2] = {0};
 static uint64_t func_times[MAX_FUNC];
+static uint64_t dag_start_tsc;
 
 void scheduler_init_pre(uint8_t pool_sz)
 {   
@@ -45,16 +46,21 @@ void scheduler_init_pre(uint8_t pool_sz)
     vcpu_pool_sz = pool_sz;
     metadata->dag_ts = 0;
     metadata->dag_n = 0;
+    metadata->dag_tot_tsc_time = 0;
+    metadata->dag_tot_proc_inp = 0;    
     //sched();
 }
 
 void scheduler_init_post(uint8_t pool_sz)
 {
     int i;
+    uint64_t t;
+    t = tsc();
     num_fin_fn = (typeof(num_fin_fn))(metadata->num_nodes);
     for(i = 1; i < pool_sz; i++) {
-	hlt_ts[i] = tsc();
+	hlt_ts[i] = t;
     }
+    dag_start_tsc = 0;
 }
 
 static void jump2fn(uint8_t id, uint8_t fn)
@@ -297,8 +303,14 @@ new_work:
 	//printf("%d,%d\n", num_fin_fn, tot_fn);
 	if(CAS(&num_fin_fn, tot_fn, 0) == tot_fn) {
 	    //printf("CAS:%d",num_fin_fn);
+	    if(dag_start_tsc != 0) {
+		metadata->dag_tot_tsc_time = tsc() - dag_start_tsc;
+		metadata->dag_tot_proc_inp += 1;
+	    }
  	    outw(PORT_MSG, MSG_WAITING_FOR_WORK);
 	    ATOMIC_INCQ_M(num_free_vcpu);
+	    t1 = tsc();
+	    dag_start_tsc = t1;
 	    // recovery code. To reset num_free_vcpu to 1
 	    // this will definitely trigger if there is a long
 	    // break. Else may not trigger, sometimes
