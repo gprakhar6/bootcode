@@ -250,7 +250,7 @@ jump_usermode:
 	pushq %rax
 	pushq %rdi // RIP
 	movq (%rdx), %rdi // input arg
-	movq 8(%rdx), %rsi // fn id
+	movq 8(%rdx), %rsi // out arg
 	movq 16(%rdx), %rdx // fn id
 	//movw    $PORT_HLT, %dx
 	//out     %al, (%dx)	
@@ -272,7 +272,7 @@ reload_gdt:
 	movw   %ax,   %ds 
 	movw   %ax,   %es 
 	movw   %ax,   %fs 
-	//movw   %ax,   %gs // swapgs is using it.
+	movw   %ax,   %gs // swapgs is using it.
 	movw   %ax,   %ss
 	retq
 	
@@ -491,6 +491,11 @@ long_mode:
 	movq    %rax, %gs      // -> GS: swapgs help
 	movq    $(MSR_KERN_GS_BASE), %rcx // write MSR_GS with stack addr
 	movq    %rbx, %rax
+//	cmpq   $0x10000, %rbx
+//	jl rbx_is_ok
+//	movw    $PORT_HLT, %dx
+//	out     %al, (%dx)			
+//rbx_is_ok:	
 	wrmsr
 	// this below 3 ins is for TBD explain
 	/*

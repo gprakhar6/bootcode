@@ -214,7 +214,7 @@ void wake_up_task()
     while((cpuid = e_bsf(&ss_reflective_bm1[0])) >= 0) {
 	dt = tsc() - kick_ts[cpuid];
 	if(dt > rekick_thd) {
-	    printf("Rekicked %d\n", cpuid);
+	    //printf("Rekicked %d\n", cpuid);
 	    kick_ts[cpuid] = tsc();
 	    vmmcall(KVM_HC_KICK_CPU, 0, (uint64_t)cpuid);
 	}
@@ -233,6 +233,7 @@ void wake_up_task()
     reflective_bm[0] = bm_inactive_vcpus;
     reflective_bm[1] = reflective_bm[0];
     DCAS(&ss_reflective_bm, zero, reflective_bm);
+    //printf("w:%d,%08X,%08X\n", wake_num_vcpu, ss_reflective_bm[1], ss_reflective_bm[0]);
     while((old_wake_num_vcpu = xadd(&wake_num_vcpu, -1)) > 0) {
 	if(old_wake_num_vcpu == 1) {
 	    sig_wake_num_vcpu_is_0 = 1;
@@ -245,7 +246,7 @@ void wake_up_task()
 		//printf("nk:%d\n", cpuid);
 		ATOMIC_INCQ_M(num_free_vcpu);
 		kick_ts[cpuid] = tsc();
-		//printf("kicking %d\n", cpuid);
+		//printf("k %d, %lu\n", cpuid, kick_ts[cpuid]);
 		asm volatile("lock btsq %1, %0      \n\t"
 			     : "+m"(bm_kicked_vcpus)
 			     : "rm"(cpuid)
@@ -263,8 +264,11 @@ void wake_up_task()
 		goto try_kick_another_vcpu;
 	    }
 	}
-	else
+	else {
+	    //printf("b\n");
 	    break; // no other vcpu I can wake
+	}
+	    
     }
 }
 void sched()
@@ -307,10 +311,15 @@ new_work:
 		metadata->dag_tot_tsc_time = tsc() - dag_start_tsc;
 		metadata->dag_tot_proc_inp += 1;
 	    }
+	    //printf("%d %lu:%d\n", id64, tsc(), -1);
  	    outw(PORT_MSG, MSG_WAITING_FOR_WORK);
 	    ATOMIC_INCQ_M(num_free_vcpu);
 	    t1 = tsc();
 	    dag_start_tsc = t1;
+	    ss_reflective_bm[0] = 0; // wipe old wake up history
+	    ss_reflective_bm[1] = 0;
+	    ss_reflective_bm1[0] = 0;
+	    ss_reflective_bm1[1] = 0;	    
 	    // recovery code. To reset num_free_vcpu to 1
 	    // this will definitely trigger if there is a long
 	    // break. Else may not trigger, sometimes
@@ -323,6 +332,7 @@ new_work:
 		    runnable_tasks = 0;
 		}
 	    }
+	    //printf("bm:%08X\n", bm_inactive_vcpus);
 	    memcpy(metadata->dag_in_count, metadata->dag,
 		   metadata->num_nodes * sizeof(metadata->dag_in_count[0]));
 	    add_runnable_fn(metadata->start_func);
@@ -355,7 +365,7 @@ new_work:
 			 : "memory" );
 	    t1 = tsc();
 	    if(spurious_wake_up == 1) {
-		printf("spurious wake up %d,%d\n", id,num_free_vcpu);
+		//printf("spurious wake up %d,%d\n", id,num_free_vcpu);
 	    }
 	}
 	goto new_work;
@@ -373,7 +383,8 @@ new_work:
 		     : "memory");
 	asm volatile("lock incq %0     \n\t"
 		     :"+m"(metadata->dag_n)
-		     :: "memory");	
+		     :: "memory");
+	//printf("%d:%lu:%d\n", id,t2, fn);
 	jump2fn(id, (uint8_t)fn);
     }
 
