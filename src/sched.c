@@ -278,7 +278,7 @@ void sched()
     uint64_t id64, tot_fn, popcnt;
     int64_t spurious_wake_up, spurious_wake_up_ident;
     uint64_t t1, t2, dt;
-
+start:
     t1 = tsc();
     id = get_id();
     id64 = (uint64_t)id;
@@ -387,8 +387,7 @@ new_work:
 	//printf("%d:%lu:%d\n", id,t2, fn);
 	jump2fn(id, (uint8_t)fn);
     }
-
-    printf("No return here\n");
+    goto start;
 }
 
 // spuriously waking up cpus, maintaining correct

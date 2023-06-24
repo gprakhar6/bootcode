@@ -15,6 +15,8 @@ struct stack_frame_err_t {
     uint64_t ss;
 } __attribute__((packed));
 
+extern uint64_t kern_stack[];
+
 extern void (*int_func[256])(struct stack_frame_err_t *sf);
 void null_func(struct stack_frame_err_t *sf);
 void page_fault_handler(struct stack_frame_err_t *sf);
@@ -37,6 +39,7 @@ void high_interrupt_handler(void *rdi)
     }
     
     my_id = get_id();
+    printf("%08X %08X\n", kern_stack[0], kern_stack[256]);
 //    if(sf_err->int_num == 0x81)
 //	asm("hlt");
 //    else
@@ -51,6 +54,7 @@ void high_interrupt_handler(void *rdi)
     printf("rsp        = %016llX\n", sf_err->rsp);
     printf("ss         = %016llX\n", sf_err->ss);
     int_func[sf_err->int_num](sf_err);
+    halt();
     return;
 }
 

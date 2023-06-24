@@ -81,7 +81,7 @@ __reset:
 	//movl $(0x18000), %esp       // why -16 will think later
 	//movl %esp, %ebp
 	//call check_cpuid
-	movl $0b10100000, %eax             // Set the PAE and PGE bit.
+	movl $0b10110000, %eax             // Set the PAE and PGE bit, FSGSBASE[16].
 	movl %eax, %cr4
 	movl $(boot_p4), %eax
 	imull $(512), %ecx // ecx has cpu id at starting
@@ -175,7 +175,7 @@ enable_sse:
 .globl __syscall_entry
 __syscall_entry:
 	swapgs
-	movq  %rsp,%gs:(256*8) // after 256*8
+	movq  %rsp,%gs:(256*8) // after 256*8, in the kern_stack page
 	movq %gs:0, %rsp
 	pushq %gs:(256*8) // user stack
 	swapgs
@@ -251,9 +251,7 @@ jump_usermode:
 	pushq %rdi // RIP
 	movq (%rdx), %rdi // input arg
 	movq 8(%rdx), %rsi // out arg
-	movq 16(%rdx), %rdx // fn id
-	//movw    $PORT_HLT, %dx
-	//out     %al, (%dx)	
+	movq 16(%rdx), %rdx // fn id	
 	iretq
 	hlt
 .globl reload_gdt
@@ -272,7 +270,7 @@ reload_gdt:
 	movw   %ax,   %ds 
 	movw   %ax,   %es 
 	movw   %ax,   %fs 
-	movw   %ax,   %gs // swapgs is using it.
+	//movw   %ax,   %gs // swapgs is using it.
 	movw   %ax,   %ss
 	retq
 	
@@ -491,12 +489,7 @@ long_mode:
 	movq    %rax, %gs      // -> GS: swapgs help
 	movq    $(MSR_KERN_GS_BASE), %rcx // write MSR_GS with stack addr
 	movq    %rbx, %rax
-//	cmpq   $0x10000, %rbx
-//	jl rbx_is_ok
-//	movw    $PORT_HLT, %dx
-//	out     %al, (%dx)			
-//rbx_is_ok:	
-	wrmsr
+	wrmsr	
 	// this below 3 ins is for TBD explain
 	/*
 	the math lib, uses `movw fs:28, %rax` sort of instruction
@@ -653,6 +646,14 @@ scratch_pad:
 	.byte 0
 .endr
 
+.globl kern_stack
+.p2align 4
+kern_stack:
+	.fill  256, 8, 0
+syscall_user_stack: // used for storing user stack on syscall
+	.fill  256, 8, 0
+
+	
 .section .interrupt_table, "aw", @progbits
 
 .macro  IDT_TABLE_64 from, to
@@ -707,13 +708,6 @@ idt_end:
 idt_descriptor :
     .word idt_end - idt - 1 // Size of our idt, always one less than the actual size
     .quad idt // Start address of our idt	
-
-.globl kern_stack	
-.p2align 4
-kern_stack:
-	.fill  256, 8, 0
-syscall_user_stack: // used for storing user stack on syscall
-	.fill  256, 8, 0
 
 // paging structures
 .section .paging, "aw", @progbits

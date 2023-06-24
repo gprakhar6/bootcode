@@ -123,11 +123,12 @@ volatile static inline uint8_t get_pool_sz()
 volatile static inline uint8_t get_id()
 {
     uint64_t rax;
-    asm("movq %%rsp, %0\n"
-	"shrq $12, %0\n"
-	"addq $1, %0\n"
-	"shlq $12, %0\n"
-	"movq -8(%0), %0" : "=r"(rax));
+    asm volatile("movq %%rsp, %0\n"
+		 "subq $1, %0\n"   // Temporary solution when rsp = X000 value
+		 "shrq $12, %0\n"
+		 "addq $1, %0\n"
+		 "shlq $12, %0\n"
+		 "movq -8(%0), %0\n": "=a"(rax));
     return (uint8_t)(rax & 0x00FF);
 }
 
@@ -333,6 +334,11 @@ static inline uint64_t xadd(int64_t *m, int64_t rax) {
 		 : "memory");
 
     return rax;
+}
+static inline void halt()
+{
+    asm volatile("movw    $0x3fa, %%dx\n\t"
+		 "out     %%al, (%%dx)\n\t"::: "dx");
 }
 
 uint64_t get_kern_stack();
